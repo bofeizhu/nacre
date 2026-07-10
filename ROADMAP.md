@@ -321,12 +321,75 @@ fine (replay only fails on unrecorded requests nacre makes).
       locked to the registry checksum and pushed (c6a4762). Milestone 4
       complete.
 
+## Milestone 5 — Layer 3 gateway: napi-rs bindings, visualization-first
+
+Rationale: the Electron app ("Electron + RTK + napi-rs") is the product,
+and memory-graph visualization is a must-have feature. Visualization is a
+pure read-path concern and every primitive already exists (group scans,
+budgeted traversal, bi-temporal as_of/as_at, node_history, mentions,
+AddEpisodeOutcome deltas) — this milestone exposes them across the FFI
+with TypeScript types, plus the write path and search. NOT in scope: the
+Electron app itself (own repo later), npm publishing (user-gated, like
+crates.io), and any new pipeline features — bindings wrap what exists.
+Conformance stays the regression net for any core change a binding
+motivates; core changes must not alter recorded requests.
+
+- [ ] `nacre-node` workspace crate (napi-rs, cdylib): scaffolding that
+      `cargo build -p nacre-node` compiles and `npm run build` (via
+      @napi-rs/cli, dev-dependency inside the crate dir) packages into a
+      loadable `.node` addon with generated `.d.ts`. Workspace `cargo test`
+      must stay green without any Node toolchain installed (the crate's
+      own tests are Rust-side only). Document the build in the crate
+      README.
+- [ ] Handle + write path: `Memory.open(path, deviceId)` wrapping Grit;
+      `addEpisode(episode, options)` running the full pipeline with
+      provider config passed from JS — `{provider: "anthropic" | "deepseek"
+      | "replay", ...}` mapping to ClaudeConfig presets or a
+      RecordingStore path (replay mode makes Node-side tests offline and
+      deterministic, same recordings format as the oracle). Returns the
+      AddEpisodeOutcome deltas (new/merged/invalidated ids) — the UI
+      animation feed.
+- [ ] Read path for the graph view: `nodesInGroup` / `edgesInGroup` /
+      `episodesInGroup` (full rows, JSON), `traverse(seeds, {depth,
+      budget, asOf, asAt})` returning the Subgraph, `nodeHistory(id)`,
+      `mentionsOf(id)`, `retrievePreviousEpisodes`. Timestamps as ISO
+      strings; ids as strings. These five calls are the entire data
+      contract the graph visualization needs — document that explicitly
+      in the .d.ts docs.
+- [ ] Search: `searchEdges(query, group, limit)` with the embedder config
+      from JS ({provider: "zhipu" | "openai-compatible" | "replay", ...});
+      hits carry facts, validity, provenance episode ids.
+- [ ] Node-side offline test: a small JS test (node --test) driving
+      open → addEpisode(replay recordings from a committed mini-fixture)
+      → reads → searchEdges(replay), asserting the outcome deltas and a
+      traversal shape. Runs only when the addon has been built; skipped
+      (loudly) otherwise so cargo-only CI stays green.
+- [ ] Live Node smoke (preapproved keys, same guardrails as the Rust
+      smoke): a script mirroring examples/live_smoke.rs through the
+      bindings — ingest 3 turns via DeepSeek+Zhipu, print deltas, run
+      queries. Proves the FFI end-to-end.
+- [ ] Viz starter artifact: `examples/viz/` — a script that dumps a smoke
+      graph as JSON (nodes/edges with labels, validity, provenance) plus a
+      minimal self-contained viewer.html (offline, no CDN) rendering it as
+      a force-directed graph with an as-of time slider stub. Not a
+      product — a data-contract proof the Electron app can copy from.
+- [ ] BLOCKED(user: npm publish decision) Package/publish story for
+      `nacre-node` (name, platforms, prebuilds). Everything before this
+      works from a local build.
+
 ## Later (do not start without a user decision)
 
-- [ ] Custom edge-attribute extraction (pydantic edge models with fields →
-      `extract_edges.extract_attributes` + `apply_capped_attributes`) —
-      deferred from `dedupe/edges.rs`; not exercised by trace1. Port when a
-      trace or Layer 3 needs custom edge ontologies.
-- Golden traces #2+ (bulk-ish episode volume, group_id isolation, purge).
+Coverage deepening, in the order agreed 2026-07-10 (activate when the
+Electron app demonstrates the need, or on user say-so):
+
+- [ ] Custom entity/edge ontologies: node + edge attribute extraction
+      (`extract_attributes` + `apply_capped_attributes` paths) with a
+      golden trace exercising typed entities — the highest-value gap for
+      a real memory product.
+- [ ] Golden trace #2: text/json episode sources (prompt routing is
+      ported + fixture-tested, never trace-exercised).
+- [ ] Golden traces #3+: bulk-ish episode volume (candidate-pool
+      saturation), group_id isolation, purge/right-to-forget.
 - Search cross-encoder reranking evaluation.
-- Communities port. Saga summarization. crates.io publish of nacre-core.
+- Communities-equivalent topic rollups, designed natively (not a port).
+- crates.io publish of nacre-core.
