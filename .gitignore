@@ -1,0 +1,7 @@
+/target
+**/*.rs.bk
+# capture harness (oracle/) — networked, local-only artifacts
+oracle/.venv/
+oracle/.env
+*.env
+.DS_Store

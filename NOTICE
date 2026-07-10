@@ -1,0 +1,12 @@
+nacre — LLM extraction pipeline for agent memory
+Copyright (c) 2026 Bofei Zhu
+
+This project is a Rust port of the extraction pipeline of Graphiti
+(https://github.com/getzep/graphiti), Copyright Zep Software, Inc.,
+licensed under the Apache License, Version 2.0. Ported material includes
+prompt text, extraction/deduplication/invalidation logic, and search
+orchestration design, adapted from Graphiti v0.29.2. Graphiti is not
+affiliated with and does not endorse this project.
+
+Storage and retrieval are provided by grit
+(https://github.com/bofeizhu/grit), MIT OR Apache-2.0.
