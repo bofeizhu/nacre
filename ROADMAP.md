@@ -383,11 +383,16 @@ motivates; core changes must not alter recorded requests.
       filters the fused list BEFORE the budget cut; nacre's search_edges
       now uses edge-only targets with the exact limit (overfetch deleted).
       All five trace queries return hits through the FFI at limit 3.
-- [ ] Node-side offline test: a small JS test (node --test) driving
+- [x] Node-side offline test: a small JS test (node --test) driving
       open → addEpisode(replay recordings from a committed mini-fixture)
       → reads → searchEdges(replay), asserting the outcome deltas and a
       traversal shape. Runs only when the addon has been built; skipped
       (loudly) otherwise so cargo-only CI stays green.
+      → done 2026-07-10: test/memory.test.mjs replays the committed trace1
+      recordings (no new fixture needed — they ARE the committed
+      deterministic fixture); covers deltas, all five viz reads, search
+      with provenance, and the fail-loudly replay-miss surface. Skip path
+      verified by hiding index.js.
 - [ ] Live Node smoke (preapproved keys, same guardrails as the Rust
       smoke): a script mirroring examples/live_smoke.rs through the
       bindings — ingest 3 turns via DeepSeek+Zhipu, print deltas, run
