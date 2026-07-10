@@ -56,12 +56,15 @@ increment. Conventions (binding for any agent working this file):
       summary_description), 3 fixture cases. All five prompt families are now
       ported (23 fixture cases total); PROMPTS.md records what was deliberately
       NOT ported (combined extraction, sagas, eval, lib registry).
-- [ ] oracle/ harness **code** (no networked run yet): uv project pinning
-      `graphiti-core==0.29.2` + falkordb, docker-compose for FalkorDB, a
-      recording LLM-client + embedder wrapper (capture/replay), a `capture`
-      CLI that ingests an episode set and dumps: episode inputs, recordings,
-      full graph state (all temporal fields), retrieval results for a fixed
-      query list.
+- [x] oracle/ harness **code** (no networked run yet): uv project pinning
+      `graphiti-core[falkordb]==0.29.2`, docker-compose for FalkorDB,
+      recording + replay LLM/embedder wrappers (`recording_clients.py` —
+      its docstring is THE RECORDING CONTRACT: pre-mutation messages are the
+      request identity, matching nacre-core's CompletionRequest), and
+      `capture.py` (clears DB, ingests episodes, dumps aliased graph state +
+      RRF retrieval + recordings; `--replay` mode for offline determinism
+      verification; cross-encoder is a fail-loud stub). Syntax-checked only —
+      runtime verification happens at the first capture run.
 - [ ] Curated episode fixture set #1: a small multi-turn conversational
       scenario with entity overlap, a fact that later gets contradicted, and
       names that need dedup judgment. Committed under `oracle/episodes/`.

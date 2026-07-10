@@ -1,0 +1,10 @@
+# FalkorDB for golden-trace capture runs (manual, local only).
+#
+# NOTE: pin the image digest at the first successful capture — the actual
+# server version is recorded into each trace's meta.json, and traces must
+# state exactly what produced them.
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    ports:
+      - "6379:6379"

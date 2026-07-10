@@ -1,0 +1,14 @@
+[project]
+name = "nacre-oracle"
+version = "0.1.0"
+description = "Golden-trace capture harness: pinned Python Graphiti + FalkorDB with recorded LLM responses"
+requires-python = ">=3.10,<4"
+dependencies = [
+    # THE pin. Re-pinning this (together with ../refs/graphiti) is the only
+    # sanctioned way golden traces change. See ../AGENTS.md invariant 5.
+    "graphiti-core[falkordb]==0.29.2",
+]
+
+[tool.uv]
+# Capture is manual and local; this project is never packaged.
+package = false
