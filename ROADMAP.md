@@ -204,7 +204,7 @@ Conformance (`cargo test --test conformance`) is the regression net for
 every step: it must stay green, and fewer/identical embedder requests are
 fine (replay only fails on unrecorded requests nacre makes).
 
-- [ ] grit 0.2.1 (additive, no schema change): embedding getters
+- [x] grit 0.2.1 (additive, no schema change): embedding getters
       `get_node_embedding(id)` / `get_edge_embedding(id)` (read the vector a
       caller stored — the write half already exists) and a group-scan API
       (`nodes_in_group` / `edges_in_group` / `episodes_in_group` or
@@ -213,6 +213,11 @@ fine (replay only fails on unrecorded requests nacre makes).
       "getter returns exactly what the setter stored" and scan/export
       consistency. Full gate in ../grit, commit there (version 0.2.1), then
       add the uncommitted `[patch.crates-io]` override in nacre.
+      → done 2026-07-10 (grit fa75fad): scans return full rows (callers
+      filter on expired_at — no boolean params); episodes chronological;
+      getters None when no model/vector; note `cargo update -p grit-core`
+      is needed after adding the patch override (the lockfile pins the
+      registry 0.2.0 otherwise and the patch is silently unused).
 - [ ] nacre: replace the `export_jsonl`-parse snapshots in pipeline.rs with
       grit's group-scan API (pure refactor; conformance green proves it).
 - [ ] nacre: persist embeddings at write time, mirroring upstream's
