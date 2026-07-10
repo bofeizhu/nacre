@@ -19,9 +19,16 @@ serde = { version = "1.0", features = ["derive"] }
 # preserve_order matters: prompt rendering reproduces Python dict insertion
 # order (f-string repr and json.dumps), which BTreeMap ordering would break.
 serde_json = { version = "1.0", features = ["preserve_order"] }
+# Real Claude API client only; cargo test never touches the network.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
 thiserror = "2.0.18"
 # Same type grit-core's API speaks (it doesn't re-export it).
 uuid = "1.23"
+
+[features]
+# The real Claude API LanguageModel client (networked; off by default —
+# AGENTS.md invariant 4 keeps cargo test offline).
+claude = ["dep:reqwest"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }

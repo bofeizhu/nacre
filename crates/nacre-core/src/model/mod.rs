@@ -7,6 +7,8 @@
 //! is asked something no recording answers fails loudly instead of guessing
 //! or calling out.
 
+#[cfg(feature = "claude")]
+pub mod claude;
 mod recording;
 
 pub use recording::{

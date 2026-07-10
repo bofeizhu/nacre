@@ -136,11 +136,6 @@ increment. Conventions (binding for any agent working this file):
       be written back. Needs a grit-side decision (e.g. a `SetNodeSummary` /
       `UpdateNode` op — touches the sync vocabulary, convergence property
       tests, and a grit release + version bump per the umbrella co-dev flow).
-- [ ] Edge invalidation-candidate gathering parity: pipeline uses 1-hop
-      traversal around the endpoints; upstream gathers candidates by hybrid
-      search over edge facts. Revisit once embeddings are wired (grit search
-      needs vectors) and judge against golden trace #1 — record in
-      DEVIATIONS.md if the difference survives.
 - [x] `search/`: the default `graphiti.search` surface (EDGE_HYBRID_SEARCH_RRF
       path) over grit's fused hybrid retrieval — edge hits filtered from
       grit's ranking with over-fetch, limit applied; rank-order parity is the
@@ -155,8 +150,21 @@ increment. Conventions (binding for any agent working this file):
       per-episode reference-time clock). Skips loudly until golden trace #1
       exists; the differ is exercised by an offline self-test. Expect
       first-contact shakeout when the trace lands.
-- [ ] Real Claude API `LanguageModel` client behind a `claude` feature flag
-      (off by default; manual integration test only — never in `cargo test`).
+- [x] Real Claude API `LanguageModel` client behind a `claude` feature flag
+      (off by default; never in `cargo test`): raw HTTP against /v1/messages
+      (no official Rust SDK), structured outputs via `output_config.format`
+      json_schema with a registry mirroring src/schemas.rs (the recording
+      contract keys on pre-mutation messages, so the client is free to use
+      the native mechanism instead of upstream's schema-append mutation),
+      Opus 4.8 / Haiku 4.5 tier mapping, refusal/truncation handling,
+      429/5xx retry with backoff. Offline unit tests cover the request
+      builder, schema registry, and response parsing. Wrap in
+      RecordingModel for capture runs.
+- [ ] BLOCKED(until golden trace #1 exists + embeddings wired) Edge
+      invalidation-candidate gathering parity: pipeline uses 1-hop traversal
+      around the endpoints; upstream gathers candidates by hybrid search
+      over edge facts. Judge against trace #1 retrieval/graph diffs; record
+      in DEVIATIONS.md if the difference survives.
 
 ## Later (do not start without a user decision)
 
