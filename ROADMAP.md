@@ -273,11 +273,16 @@ fine (replay only fails on unrecorded requests nacre makes).
       `PREVIOUS_EPISODE_WINDOW` (=10); inclusive <= reference, chronological;
       timestamps re-render at second precision matching Python isoformat.
       Conformance now sources its windows from grit itself — green.
-- [ ] nacre: real embedder client behind an `openai-embed` feature flag
+- [x] nacre: real embedder client behind an `openai-embed` feature flag
       (reqwest, OpenAI-compatible `/embeddings`, configurable base URL +
       model + dim truncation — Zhipu embedding-3 is the first target; never
       compiled into `cargo test` default). Offline unit tests for request
       building and response parsing only.
+      → done 2026-07-10: `model::openai_embed::{OpenAiEmbedder,
+      OpenAiEmbedConfig}` with a `zhipu()` preset (1024 dims, 64-input
+      batch chunking — Zhipu's cap); responses re-ordered by index and
+      truncated client-side (MRL slice, no renormalization); 429/5xx retry
+      shares claude.rs's tokio-free sleep (hoisted to model/mod.rs).
 - [ ] nacre: `claude.rs` configurable base URL + API key env (defaults
       unchanged: api.anthropic.com). Purpose: DeepSeek's Anthropic-style
       endpoint becomes usable through the same client. Verify whether it

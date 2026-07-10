@@ -264,7 +264,7 @@ impl LanguageModel for ClaudeModel {
             }
             if attempt < MAX_RETRIES {
                 // Exponential backoff: 1s, 2s.
-                tokio_sleep(1u64 << attempt).await;
+                super::tokio_sleep(1u64 << attempt).await;
             }
         }
         Err(ModelError::Provider(format!(
@@ -272,44 +272,6 @@ impl LanguageModel for ClaudeModel {
             MAX_RETRIES + 1
         )))
     }
-}
-
-/// Minimal async sleep without a tokio dependency in the library: reqwest
-/// already requires a tokio runtime, but the `time` feature may be absent —
-/// spawn the wait on a blocking thread.
-async fn tokio_sleep(secs: u64) {
-    let (tx, rx) = std::sync::mpsc::channel::<()>();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(secs));
-        let _ = tx.send(());
-    });
-    // Poll the channel without blocking the async executor.
-    loop {
-        match rx.try_recv() {
-            Ok(()) | Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
-            Err(std::sync::mpsc::TryRecvError::Empty) => yield_now().await,
-        }
-    }
-}
-
-async fn yield_now() {
-    struct YieldOnce(bool);
-    impl std::future::Future for YieldOnce {
-        type Output = ();
-        fn poll(
-            mut self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<()> {
-            if self.0 {
-                std::task::Poll::Ready(())
-            } else {
-                self.0 = true;
-                cx.waker().wake_by_ref();
-                std::task::Poll::Pending
-            }
-        }
-    }
-    YieldOnce(false).await
 }
 
 #[cfg(test)]

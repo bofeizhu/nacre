@@ -29,6 +29,8 @@ uuid = "1.23"
 # The real Claude API LanguageModel client (networked; off by default —
 # AGENTS.md invariant 4 keeps cargo test offline).
 claude = ["dep:reqwest"]
+# OpenAI-compatible /embeddings client (networked; off by default).
+openai-embed = ["dep:reqwest"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }
