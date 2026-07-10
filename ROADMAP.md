@@ -373,6 +373,17 @@ motivates; core changes must not alter recorded requests.
       minimal self-contained viewer.html (offline, no CDN) rendering it as
       a force-directed graph with an as-of time slider stub. Not a
       product — a data-contract proof the Electron app can copy from.
+- [ ] Golden trace #2: text/json episode sources — the doc-ingestion bet
+      for Layer 3. Curate `oracle/episodes/trace2.json` (a text document
+      chunk + a json event episode alongside a message turn; 3-4 episodes,
+      2-3 queries; exercises prompt routing by source and cross-source
+      dedup). Capture against the digest-pinned FalkorDB (docker compose up
+      in oracle/, keys from oracle/.env), verify `--replay` determinism,
+      commit fixtures. Generalize `tests/conformance.rs` to run one test
+      body per fixture directory under oracle/fixtures/ (trace1 must stay
+      green untouched). Expect a shakeout on the text/json extraction
+      prompts — fix in nacre or pin in DEVIATIONS.md, same discipline as
+      trace1.
 - [ ] BLOCKED(user: npm publish decision) Package/publish story for
       `nacre-node` (name, platforms, prebuilds). Everything before this
       works from a local build.
@@ -386,10 +397,9 @@ Electron app demonstrates the need, or on user say-so):
       (`extract_attributes` + `apply_capped_attributes` paths) with a
       golden trace exercising typed entities — the highest-value gap for
       a real memory product.
-- [ ] Golden trace #2: text/json episode sources (prompt routing is
-      ported + fixture-tested, never trace-exercised).
 - [ ] Golden traces #3+: bulk-ish episode volume (candidate-pool
       saturation), group_id isolation, purge/right-to-forget.
+      (Trace #2 — text/json sources — was promoted into Milestone 5.)
 - Search cross-encoder reranking evaluation.
 - Communities-equivalent topic rollups, designed natively (not a port).
 - crates.io publish of nacre-core.
