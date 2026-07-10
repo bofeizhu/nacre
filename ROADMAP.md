@@ -242,11 +242,15 @@ fine (replay only fails on unrecorded requests nacre makes).
       Embedder::meta() each add_episode (idempotent). Signature unchanged.
       Conformance now also asserts every live node + every edge carries a
       1024-dim vector.
-- [ ] nacre: dedup reads stored vectors — for existing nodes, take
+- [x] nacre: dedup reads stored vectors — for existing nodes, take
       `get_node_embedding` instead of re-embedding every name each episode;
       embed only names with no stored vector. Values are identical (same
       input string, same recorded vector, same f32 truncation), so candidate
       pools and prompts do not move; conformance green is the proof.
+      → done 2026-07-10: conformance passes with ZERO fallback embeds (all
+      existing names served from vectors persisted by earlier episodes);
+      the missing-names fallback keeps the harness's sorted-unique batch
+      shape for cold graphs.
 - [ ] nacre: query-embedding leg in `search/` — `search_edges` accepts an
       embedder (or pre-computed query vector), embeds the query the way
       upstream does for `graphiti.search` (verify the exact input string

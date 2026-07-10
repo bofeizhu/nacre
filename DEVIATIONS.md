@@ -75,8 +75,10 @@ cosine over the same recorded embeddings, same threshold, same limit — is
 upstream's own semantics with the engine variability removed. The uuid
 tie-break is per-run, but score ties require byte-identical names, which
 the exact-match fast path resolves before any prompt is built. Cost: the
-harness re-embeds existing names once per episode instead of reading
-stored vectors (recorded, so replay/conformance never touch the network).
+harness re-embeds existing names once per episode (recorded, so
+replay/conformance never touch the network); nacre reads the vectors it
+persisted at write time and embeds only names with no stored vector —
+identical values, fewer requests.
 
 **Asserted by:** `tests/conformance.rs::golden_trace1_conformance` (every
 `NodeResolutions` recording lookup embeds the pools and their order).

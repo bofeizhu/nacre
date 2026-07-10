@@ -204,17 +204,33 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
         let queries: Vec<String> = drafts.iter().map(|d| d.name.replace('\n', " ")).collect();
         let query_vectors = embedder.embed(&queries).await?;
         if !group_nodes.is_empty() {
-            let names: Vec<String> = group_nodes
+            // Stored vectors first (written at persistence time from the
+            // same raw name strings, so values are identical to a fresh
+            // embed); only names with no vector yet go to the embedder —
+            // sorted unique, mirroring the oracle harness's batch shape.
+            // In a warm graph this loop makes zero embedder requests.
+            let mut name_vectors: std::collections::HashMap<&str, Vec<f32>> =
+                std::collections::HashMap::new();
+            for node in &group_nodes {
+                if !name_vectors.contains_key(node.name.as_str())
+                    && let Some(vector) = grit.get_node_embedding(node.id)?
+                {
+                    name_vectors.insert(node.name.as_str(), vector);
+                }
+            }
+            let missing: Vec<String> = group_nodes
                 .iter()
+                .filter(|n| !name_vectors.contains_key(n.name.as_str()))
                 .map(|n| n.name.clone())
                 .collect::<std::collections::BTreeSet<_>>()
                 .into_iter()
                 .collect();
-            let name_vectors: std::collections::HashMap<&str, Vec<f32>> = names
-                .iter()
-                .map(String::as_str)
-                .zip(embedder.embed(&names).await?)
-                .collect();
+            if !missing.is_empty() {
+                for (name, vector) in missing.iter().zip(embedder.embed(&missing).await?) {
+                    name_vectors.insert(name.as_str(), vector);
+                }
+            }
+            let name_vectors = name_vectors; // freeze
             for (pool, query_vector) in candidate_pools.iter_mut().zip(&query_vectors) {
                 let mut scored: Vec<(f64, String, &grit_core::Node)> = group_nodes
                     .iter()
