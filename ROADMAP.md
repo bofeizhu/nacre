@@ -312,10 +312,14 @@ fine (replay only fails on unrecorded requests nacre makes).
       3 turns ingested (extraction, 5 merges, 1 invalidation
       Rotterdam→Utrecht, summaries, embeddings persisted); all 3 queries
       answered correctly with provenance. The full stack works live.
-- [ ] BLOCKED(user: cargo publish) Release grit 0.2.1 to crates.io, drop
-      nacre's patch override, regenerate Cargo.lock against the registry,
-      full gates both repos, commit + push both. Nacre's `grit-core = "0.2"`
-      requirement already accepts 0.2.1.
+- [x] Release grit 0.2.1 to crates.io, drop nacre's patch override,
+      regenerate Cargo.lock against the registry, full gates both repos,
+      commit + push both. Nacre's `grit-core = "0.2"` requirement already
+      accepts 0.2.1.
+      → done 2026-07-10 (user-approved publish): grit-core + grit-compat
+      0.2.1 on crates.io, grit tagged v0.2.1 and pushed (fa75fad); nacre
+      locked to the registry checksum and pushed (c6a4762). Milestone 4
+      complete.
 
 ## Later (do not start without a user decision)
 
