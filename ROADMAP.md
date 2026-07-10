@@ -86,14 +86,19 @@ increment. Conventions (binding for any agent working this file):
       sides of the oracle (see DEVIATIONS.md, three entries).
       `capture.py --replay` verifies graph-state determinism and fails
       loudly; retrieval fixtures are advisory (DEVIATIONS.md).
-- [ ] BLOCKED(user: grit op-vocabulary decision — SetNodeSummary/UpdateNode)
-      Conformance green for trace1. `cargo test --test conformance` now runs
-      end-to-end and is byte-exact through ep-0 and everywhere in ep-1
-      EXCEPT node summaries: upstream persists per-episode entity summaries
-      and they enter later dedupe prompts (`summary` field of EXISTING
-      ENTITIES), so nacre cannot conform without persisting summaries —
-      grit's AddNode upsert is lowest-HLC-wins and cannot update. This is
-      the concrete evidence the gated grit decision was waiting for.
+- [x] Conformance GREEN for trace1 (2026-07-10): `cargo test --test
+      conformance` replays all 5 episodes byte-exactly and the graph-state
+      diff is clean. Unblocked by grit 0.2's `UpdateNode` (per-field LWW —
+      summaries, name/label promotion persist) and `AddEdge.invalid_at`
+      (extraction-time bounds without belief retraction). The shakeout
+      surfaced and fixed, in nacre: merged-away drafts leaking into
+      candidate pools, edge extraction seeing resolved instead of extracted
+      names, upstream's draft-edge dedup prologue, directed
+      get_between_nodes semantics, the 10-episode previous-window
+      (RELEVANT_SCHEMA_LIMIT, not EPISODE_WINDOW_LEN), upstream's
+      shared-object summary accumulation, and FalkorDB's first-write-wins
+      bulk-save semantics for duplicate uuids (three new DEVIATIONS.md
+      entries pin the last one and the dump normalizations).
 
 ## Milestone 3 — the pipeline port (each step: logic + replay tests green)
 

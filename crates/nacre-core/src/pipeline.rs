@@ -14,9 +14,9 @@
 //! - the episode itself → `AddEpisode` last, with mentions of every node
 //!   and edge it evidenced
 //!
-//! Known gaps, pending a grit op-vocabulary decision (see ROADMAP.md):
-//! summary refresh and label promotion have no update op to persist
-//! through — updated summaries are returned to the caller instead.
+//! Summary refresh and label promotion persist through grit's `UpdateNode`
+//! (per-field LWW; grit ≥0.2) — the pipeline diffs refreshed metadata
+//! against storage and emits ops only for real changes.
 //! Candidate gathering is engine-free on both sides of the oracle (the
 //! capture harness patches upstream identically — see DEVIATIONS.md):
 //! node dedup candidates come from pinned-arithmetic cosine ranking of the
@@ -33,6 +33,7 @@ use crate::extract::edges::{ExtractEdgesOptions, parse_llm_timestamp};
 use crate::extract::nodes::ExtractNodesOptions;
 use crate::extract::{self, EpisodeInput, NodeRef};
 use crate::model::{Embedder, LanguageModel, ModelError};
+use crate::summarize::{self, SummarizeNode};
 
 /// Upstream's candidate-pool bound.
 // ports: node_operations.py::NODE_DEDUP_CANDIDATE_LIMIT
@@ -140,7 +141,11 @@ fn group_nodes_snapshot(
         if value["t"] == "node" {
             let node: grit_core::Node =
                 serde_json::from_value(value).expect("node record round-trips");
-            if node.group_id == group_id {
+            // Live nodes only: upstream never persists merged-away drafts,
+            // so its candidate pools cannot contain them — grit keeps the
+            // expired draft rows for audit, and two same-name rows would
+            // wrongly turn exact-match resolutions ambiguous.
+            if node.group_id == group_id && node.expired_at.is_none() {
                 nodes.push(node);
             }
         }
@@ -302,11 +307,40 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
                     into,
                 })?;
                 merges.push((draft_id, into));
+                // Persist label promotion (the resolution's labels already
+                // carry it): upstream re-saves the hydrated node; grit's
+                // equivalent is an UpdateNode, skipped when nothing changed.
+                let stored = grit.node(into)?.expect("canonical node exists");
+                if labels_of(&stored) != existing.labels {
+                    let kind = existing
+                        .labels
+                        .iter()
+                        .find(|l| *l != "Entity")
+                        .cloned()
+                        .unwrap_or_else(|| "Entity".to_owned());
+                    let mut attrs = match &stored.attrs {
+                        serde_json::Value::Object(map) => map.clone(),
+                        _ => serde_json::Map::new(),
+                    };
+                    attrs.insert("labels".into(), json!(existing.labels));
+                    grit.apply(GraphOp::UpdateNode {
+                        id: into,
+                        name: None,
+                        summary: None,
+                        kind: Some(kind),
+                        attrs: Some(serde_json::Value::Object(attrs)),
+                    })?;
+                }
                 final_ids.push(into);
+                // Edge extraction sees the EXTRACTED name (upstream passes
+                // extracted_nodes to the prompt and resolves endpoints via
+                // uuid_map afterwards) — so a draft "Priya Raman" that
+                // resolved onto "Priya" still renders as "Priya Raman", and
+                // the endpoint lands on the canonical node.
                 node_refs.push(NodeRef {
                     id: existing.id.clone(),
-                    name: existing.name.clone(),
-                    labels: existing.labels.clone(),
+                    name: draft.name.clone(),
+                    labels: draft.labels.clone(),
                 });
             }
             None => {
@@ -330,6 +364,24 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
     )
     .await?;
 
+    // Collapse extracted duplicates upfront, keeping the first occurrence —
+    // upstream dedups by (resolved source, resolved target, normalized
+    // fact) before any resolution, so "Priya left" extracted via both the
+    // "Priya" and "Priya Raman" drafts becomes ONE edge.
+    // ports: edge_operations.py::resolve_extracted_edges (dedup prologue)
+    let mut seen_draft_edges: std::collections::HashSet<(String, String, String)> =
+        std::collections::HashSet::new();
+    let draft_edges: Vec<_> = draft_edges
+        .into_iter()
+        .filter(|edge| {
+            seen_draft_edges.insert((
+                edge.source_id.clone(),
+                edge.target_id.clone(),
+                dedupe::helpers::normalize_string_exact(&edge.fact),
+            ))
+        })
+        .collect();
+
     // 5. Resolve each edge against stored context and apply the decisions.
     let episode_id = grit.new_id();
     let episode_ref = EpisodeRef {
@@ -339,6 +391,18 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
     let mut new_edge_ids: Vec<Uuid> = Vec::new();
     let mut invalidated_edge_ids: Vec<Uuid> = Vec::new();
     let mut mentioned_edges: Vec<Uuid> = Vec::new();
+    // Edge temporal writes are applied AFTER the loop, one op per edge,
+    // FIRST decision wins: upstream saves every mutated edge object in a
+    // single bulk write whose duplicate-uuid semantics keep the first
+    // occurrence — and the resolved (duplicate) entries precede the
+    // invalidated ones in that list, so an unmutated duplicate resolution
+    // blocks later contradictions of the same edge. `None` records such a
+    // blocker without emitting an op.
+    let mut pending_invalidations: Vec<(Uuid, Option<i64>)> = Vec::new();
+    // (src, dst, fact) of edges created this episode — only these feed the
+    // summary refresh, mirroring upstream's `edges=new_edges` ("to avoid
+    // duplicating facts that already exist in the graph").
+    let mut new_edge_tuples: Vec<(String, String, String)> = Vec::new();
 
     // Snapshot the group's edges once, before any of this episode's edge
     // ops: upstream resolves every extracted edge against the pre-episode
@@ -363,8 +427,11 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
                 .iter()
                 .map(Uuid::to_string)
                 .collect();
-            let same_endpoints =
-                (edge.src == src && edge.dst == dst) || (edge.src == dst && edge.dst == src);
+            // DIRECTED, like upstream's get_between_nodes Cypher match
+            // `(source)-[e]->(target)`: a stored Priya→Biscuit edge is NOT a
+            // dedup candidate for a Biscuit→Priya draft (it lands in the
+            // invalidation pool instead).
+            let same_endpoints = edge.src == src && edge.dst == dst;
             if same_endpoints {
                 related.push(existing);
             } else {
@@ -394,13 +461,33 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
         match &resolution.resolved.duplicate_of {
             Some(existing_id) => {
                 // Reuse the stored edge; attribution flows through the
-                // episode's mentions below.
-                if resolution.resolved.append_episode {
-                    mentioned_edges.push(existing_id.parse().expect("grit ids round-trip"));
+                // episode's mentions (grit's mentions table is a set, like
+                // upstream's append-if-absent episodes list).
+                let existing_uuid: Uuid = existing_id.parse().expect("grit ids round-trip");
+                mentioned_edges.push(existing_uuid);
+                // The duplicate resolution occupies the edge's first-wins
+                // slot: a self-expiry mutation carries a value; an
+                // unmutated resolution blocks later contradictions.
+                if !pending_invalidations
+                    .iter()
+                    .any(|(id, _)| *id == existing_uuid)
+                {
+                    let stored_invalid = grit
+                        .edge(existing_uuid)?
+                        .map(|e| e.invalid_at)
+                        .unwrap_or_default();
+                    let resolved_invalid =
+                        resolution.resolved.invalid_at.map(|t| t.timestamp_millis());
+                    let mutated = resolved_invalid != stored_invalid;
+                    pending_invalidations
+                        .push((existing_uuid, resolved_invalid.filter(|_| mutated)));
                 }
             }
             None => {
                 let edge_id = grit.new_id();
+                // An extraction-time invalid_at rides on the edge itself —
+                // a bounded fact, not a belief retraction; it leaves no
+                // invalidation record (upstream: expired_at stays NULL).
                 grit.apply(GraphOp::AddEdge {
                     id: edge_id,
                     src,
@@ -410,29 +497,94 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
                     attrs: json!({}),
                     group_id: draft_edge.group_id.clone(),
                     valid_at: resolution.resolved.valid_at.map(|t| t.timestamp_millis()),
+                    invalid_at: resolution.resolved.invalid_at.map(|t| t.timestamp_millis()),
                 })?;
-                if let Some(invalid_at) = resolution.resolved.invalid_at {
-                    grit.apply(GraphOp::InvalidateEdge {
-                        edge_id,
-                        invalid_at: invalid_at.timestamp_millis(),
-                    })?;
-                }
                 new_edge_ids.push(edge_id);
                 mentioned_edges.push(edge_id);
+                new_edge_tuples.push((src.to_string(), dst.to_string(), draft_edge.fact.clone()));
             }
         }
 
         for invalidation in &resolution.invalidated {
             let edge_id: Uuid = invalidation.id.parse().expect("grit ids round-trip");
-            grit.apply(GraphOp::InvalidateEdge {
-                edge_id,
-                invalid_at: invalidation.invalid_at.timestamp_millis(),
-            })?;
-            invalidated_edge_ids.push(edge_id);
+            let invalid_at = invalidation.invalid_at.timestamp_millis();
+            // FIRST decision wins: upstream saves all mutated edge
+            // objects in one FalkorDB bulk UNWIND, whose write semantics
+            // keep the first occurrence of a duplicate uuid (verified
+            // empirically against trace1: e8 mutated 07-01 then 06-08,
+            // DB holds 07-01).
+            if !pending_invalidations.iter().any(|(id, _)| *id == edge_id) {
+                pending_invalidations.push((edge_id, Some(invalid_at)));
+            }
         }
     }
 
-    // 6. The episode itself, with provenance for everything it evidenced.
+    for &(edge_id, invalid_at) in &pending_invalidations {
+        let Some(invalid_at) = invalid_at else {
+            continue; // blocker only — no temporal change decided
+        };
+        grit.apply(GraphOp::InvalidateEdge {
+            edge_id,
+            invalid_at,
+        })?;
+        invalidated_edge_ids.push(edge_id);
+    }
+
+    // 6. Refresh entity summaries — upstream's extract_attributes_from_nodes
+    //    with edges=new_edges — and persist what changed via UpdateNode.
+    //    Upstream operates on the per-draft resolved-node list, where
+    //    repeated canonical nodes are ONE shared object — a node resolved
+    //    from two drafts gets its facts appended twice (real upstream
+    //    behavior). The summarize step emulates the shared object by
+    //    propagating same-id summaries; entries here are per-draft.
+    let mut summarize_nodes: Vec<SummarizeNode> = Vec::new();
+    for &id in &final_ids {
+        let stored = grit.node(id)?.expect("resolved node exists");
+        let mut attributes = match &stored.attrs {
+            serde_json::Value::Object(map) => map.clone(),
+            _ => serde_json::Map::new(),
+        };
+        attributes.remove("labels"); // storage convention, not a node attribute
+        summarize_nodes.push(SummarizeNode {
+            id: id.to_string(),
+            name: stored.name.clone(),
+            summary: stored.summary.clone(),
+            labels: labels_of(&stored),
+            attributes,
+        });
+    }
+    let edges_by_node = summarize::nodes::build_edges_by_node(&new_edge_tuples);
+    summarize::nodes::extract_entity_summaries_batch(
+        model,
+        &mut summarize_nodes,
+        episodes,
+        previous_episodes,
+        &edges_by_node,
+        &summarize::nodes::SummarizeOptions {
+            entity_types: &options.extract_nodes.entity_types,
+            ..Default::default()
+        },
+    )
+    .await?;
+    let mut updated_ids: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
+    for node in &summarize_nodes {
+        let id: Uuid = node.id.parse().expect("grit ids round-trip");
+        if !updated_ids.insert(id) {
+            continue; // repeated draft entries carry the same propagated summary
+        }
+        let stored = grit.node(id)?.expect("resolved node exists");
+        if stored.summary != node.summary {
+            grit.apply(GraphOp::UpdateNode {
+                id,
+                name: None,
+                summary: Some(node.summary.clone()),
+                kind: None,
+                attrs: None,
+            })?;
+        }
+    }
+
+    // 7. The episode itself, with provenance for everything it evidenced.
     let occurred_at = episode
         .valid_at
         .as_deref()

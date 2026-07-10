@@ -154,7 +154,22 @@ pub async fn extract_entity_summaries_batch<M: LanguageModel>(
 ) -> Result<(), ModelError> {
     let mut needs_llm: Vec<usize> = Vec::new();
 
-    for (idx, node) in nodes.iter_mut().enumerate() {
+    // Upstream's node list can repeat the SAME EntityNode object (several
+    // drafts resolved to one canonical node); each occurrence re-appends
+    // the edge facts to the shared object's current summary. Emulate the
+    // shared object by propagating every summary write to all entries with
+    // the same id.
+    let propagate = |nodes: &mut [SummarizeNode], idx: usize| {
+        let (id, summary) = (nodes[idx].id.clone(), nodes[idx].summary.clone());
+        for node in nodes.iter_mut() {
+            if node.id == id {
+                node.summary = summary.clone();
+            }
+        }
+    };
+
+    for idx in 0..nodes.len() {
+        let node = &nodes[idx];
         if let Some(filter) = options.should_summarize_node
             && !filter(node)
         {
@@ -188,7 +203,8 @@ pub async fn extract_entity_summaries_batch<M: LanguageModel>(
         if !summary_with_edges.is_empty()
             && summary_with_edges.chars().count() <= MAX_SUMMARY_CHARS * 2
         {
-            node.summary = summary_with_edges;
+            nodes[idx].summary = summary_with_edges;
+            propagate(nodes, idx);
             continue;
         }
         if summary_with_edges.is_empty() && episodes.is_empty() {

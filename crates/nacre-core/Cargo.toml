@@ -14,7 +14,7 @@ categories.workspace = true
 # MinHash signatures must be bit-identical to Python's.
 blake2 = "0.10"
 chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
-grit-core = "0.1"
+grit-core = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 # preserve_order matters: prompt rendering reproduces Python dict insertion
 # order (f-string repr and json.dumps), which BTreeMap ordering would break.

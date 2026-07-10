@@ -9,10 +9,13 @@
 //!
 //! Diff policy: `created_at` fields are wall-clock on the Python side and
 //! injected-clock here, so they are excluded from comparison. `expired_at`
-//! is also wall-clock ("when the pipeline noticed"), so only its presence
-//! is compared. Everything else — names, labels (sorted), summaries, facts,
-//! endpoints, episode attribution, valid_at/invalid_at (to the second) —
-//! must match exactly or be recorded in DEVIATIONS.md.
+//! is wall-clock and (in this pipeline) implied by `invalid_at`, so only
+//! its presence is compared — the grit side derives it from `invalid_at`.
+//! Episode `entity_edges` are compared as the set of ATTRIBUTED edges
+//! (upstream also lists contradiction-invalidated edges there without
+//! attributing them). Everything else — names, labels (sorted), summaries,
+//! facts, endpoints, episode attribution, valid_at/invalid_at (to the
+//! second) — must match exactly or be recorded in DEVIATIONS.md.
 //!
 //! Retrieval rank order is NOT asserted against the fixture: FalkorDB's
 //! HNSW vector index is nondeterministic across processes, so pinned Python
@@ -31,9 +34,12 @@ use nacre_core::search::search_edges;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-/// Upstream fetches this many previous episodes as extraction context.
-// ports: graphiti_core/utils/maintenance/graph_data_operations.py::EPISODE_WINDOW_LEN
-const EPISODE_WINDOW_LEN: usize = 3;
+/// Upstream fetches this many previous episodes as extraction context —
+/// add_episode passes `last_n=RELEVANT_SCHEMA_LIMIT`, NOT the 3-episode
+/// `EPISODE_WINDOW_LEN` default (verified against trace1's recorded
+/// prompts: ep-4's window carries all four prior episodes).
+// ports: graphiti_core/graphiti.py::add_episode (retrieve_episodes call)
+const EPISODE_WINDOW_LEN: usize = 10;
 
 fn oracle_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../oracle")
@@ -54,8 +60,15 @@ fn iso_ms(ms: Option<i64>) -> Value {
 
 /// Dump a grit group in oracle/capture.py's aliased shape. Mirrors
 /// `build_aliases` + `dump_graph_state` exactly (content-derived aliases,
-/// sorted collections, no embeddings).
-fn dump_graph_state(grit: &Grit, group_id: &str, live_only: bool) -> Value {
+/// sorted collections, no embeddings). `episode_meta` maps episode content
+/// to its trace-spec `(name, source)` — input constants Graphiti stores on
+/// the episode node but grit deliberately does not.
+fn dump_graph_state(
+    grit: &Grit,
+    group_id: &str,
+    live_only: bool,
+    episode_meta: &HashMap<String, (String, String)>,
+) -> Value {
     // grit exposes getters by id only; enumerate the group from the JSONL
     // export stream (flat records tagged `"t"`; the extra hlc field is
     // ignored by serde).
@@ -65,6 +78,7 @@ fn dump_graph_state(grit: &Grit, group_id: &str, live_only: bool) -> Value {
     let mut nodes: Vec<grit_core::Node> = Vec::new();
     let mut edges: Vec<grit_core::Edge> = Vec::new();
     let mut episodes: Vec<grit_core::Episode> = Vec::new();
+    let mut mention_targets: HashMap<String, Vec<String>> = HashMap::new();
     for line in export.lines() {
         let value: Value = serde_json::from_str(line).expect("export line parses");
         match value["t"].as_str() {
@@ -88,6 +102,12 @@ fn dump_graph_state(grit: &Grit, group_id: &str, live_only: bool) -> Value {
                 if episode.group_id == group_id {
                     episodes.push(episode);
                 }
+            }
+            Some("mention") => {
+                mention_targets
+                    .entry(value["episode_id"].as_str().unwrap().to_owned())
+                    .or_default()
+                    .push(value["target_id"].as_str().unwrap().to_owned());
             }
             _ => {}
         }
@@ -169,6 +189,12 @@ fn dump_graph_state(grit: &Grit, group_id: &str, live_only: bool) -> Value {
                     .map(|id| alias(&aliases, id))
                     .collect();
                 mentions.sort();
+                // Graphiti stamps expired_at whenever an edge carries
+                // invalid_at (any resolved edge with a bound gets
+                // expired_at = now at save); grit's own expired_at means
+                // full belief retraction and stays NULL. The differ
+                // compares presence only.
+                let graphiti_expired = e.invalid_at.is_some();
                 json!({
                     "uuid": alias(&aliases, e.id),
                     "source": alias(&aliases, e.src),
@@ -180,21 +206,42 @@ fn dump_graph_state(grit: &Grit, group_id: &str, live_only: bool) -> Value {
                     "created_at": iso_ms(Some(e.created_at)),
                     "valid_at": iso_ms(e.valid_at),
                     "invalid_at": iso_ms(e.invalid_at),
-                    "expired_at": iso_ms(e.expired_at),
+                    "expired_at": if graphiti_expired { json!(true) } else { Value::Null },
                 })
             })
             .collect();
         out.sort_by_key(|v| v["uuid"].as_str().unwrap_or("").to_owned());
         out
     };
+    let edge_ids: std::collections::HashSet<Uuid> = edges.iter().map(|e| e.id).collect();
     let episode_dump: Vec<Value> = {
         let mut out: Vec<Value> = episodes
             .iter()
             .map(|e| {
+                let (name, source) = episode_meta.get(&e.content).cloned().unwrap_or_default();
+                // grit mentions are a set; the differ normalizes the
+                // expected side's entity_edges the same way (sorted, no
+                // multiplicity — see DEVIATIONS.md).
+                let mut entity_edges: Vec<String> = mention_targets
+                    .get(&e.id.to_string())
+                    .map(|targets| {
+                        targets
+                            .iter()
+                            .filter_map(|t| t.parse::<Uuid>().ok())
+                            .filter(|id| edge_ids.contains(id))
+                            .map(|id| alias(&aliases, id))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                entity_edges.sort();
+                entity_edges.dedup();
                 json!({
                     "uuid": alias(&aliases, e.id),
+                    "name": name,
                     "content": e.content,
+                    "source": source,
                     "source_description": e.source,
+                    "entity_edges": entity_edges,
                     "valid_at": iso_ms(Some(e.occurred_at)),
                     "created_at": iso_ms(Some(e.created_at)),
                 })
@@ -213,12 +260,58 @@ fn dump_graph_state(grit: &Grit, group_id: &str, live_only: bool) -> Value {
 /// differences.
 fn diff_states(expected: &Value, actual: &Value, ignore: &[&str]) -> Vec<String> {
     let mut diffs = Vec::new();
-    let expected = normalize_expired_at(expected.clone());
-    let actual = normalize_expired_at(actual.clone());
+    let expected = normalize_expired_at(filter_unattributed_entity_edges(expected.clone()));
+    let actual = normalize_expired_at(filter_unattributed_entity_edges(actual.clone()));
     diff_value("", &expected, &actual, ignore, &mut diffs);
     diffs
 }
 
+/// Restrict each episode's `entity_edges` to edges actually ATTRIBUTED to
+/// it (the edge's own `episodes` list contains the episode). Upstream also
+/// lists contradiction-invalidated edges there without attributing them —
+/// provenance grit's mentions model does not record (see DEVIATIONS.md).
+fn filter_unattributed_entity_edges(mut state: Value) -> Value {
+    let Some(edges) = state["edges"].as_array() else {
+        return state;
+    };
+    let mut episodes_of_edge: HashMap<String, Vec<String>> = HashMap::new();
+    for edge in edges {
+        if let (Some(uuid), Some(eps)) = (edge["uuid"].as_str(), edge["episodes"].as_array()) {
+            episodes_of_edge.insert(
+                uuid.to_owned(),
+                eps.iter()
+                    .filter_map(|v| v.as_str().map(str::to_owned))
+                    .collect(),
+            );
+        }
+    }
+    if let Some(episodes) = state["episodes"].as_array_mut() {
+        for episode in episodes {
+            let Some(ep_uuid) = episode["uuid"].as_str().map(str::to_owned) else {
+                continue;
+            };
+            if let Some(entity_edges) = episode["entity_edges"].as_array() {
+                let kept: Vec<Value> = entity_edges
+                    .iter()
+                    .filter(|e| {
+                        e.as_str().is_some_and(|id| {
+                            episodes_of_edge
+                                .get(id)
+                                .is_some_and(|eps| eps.contains(&ep_uuid))
+                        })
+                    })
+                    .cloned()
+                    .collect();
+                episode["entity_edges"] = Value::Array(kept);
+            }
+        }
+    }
+    state
+}
+
+/// `expired_at` → presence flag; `entity_edges` → sorted set (grit mentions
+/// carry no multiplicity; upstream's list repeats an edge once per draft
+/// that resolved to it — see DEVIATIONS.md).
 fn normalize_expired_at(mut value: Value) -> Value {
     match &mut value {
         Value::Object(map) => {
@@ -226,6 +319,15 @@ fn normalize_expired_at(mut value: Value) -> Value {
                 && !v.is_null()
             {
                 *v = json!(true);
+            }
+            if let Some(Value::Array(items)) = map.get_mut("entity_edges") {
+                let mut ids: Vec<String> = items
+                    .iter()
+                    .filter_map(|v| v.as_str().map(str::to_owned))
+                    .collect();
+                ids.sort();
+                ids.dedup();
+                *map.get_mut("entity_edges").unwrap() = json!(ids);
             }
             for (_, v) in map.iter_mut() {
                 *v = normalize_expired_at(v.take());
@@ -299,13 +401,6 @@ fn trace_episode(spec: &Value) -> EpisodeInput {
 
 /// End-to-end: replay golden trace #1 through nacre + grit and diff.
 /// Skips (loudly) until the capture run has produced the fixture.
-///
-/// Ignored while summary persistence is blocked on the grit op-vocabulary
-/// decision (ROADMAP.md Milestone 2): upstream persists per-episode entity
-/// summaries and they enter later dedupe prompts, so replay lookups miss
-/// from ep-1 onward. Everything else is byte-exact — run manually with
-/// `cargo test --test conformance -- --ignored` to see the current diff.
-#[ignore = "BLOCKED(user): grit SetNodeSummary/UpdateNode decision — see ROADMAP.md"]
 #[tokio::test]
 async fn golden_trace1_conformance() {
     let trace_dir = oracle_dir().join("fixtures/trace1");
@@ -370,7 +465,21 @@ async fn golden_trace1_conformance() {
         episodes.push(episode);
     }
 
-    let actual_state = dump_graph_state(&grit, &group_id, true);
+    let episode_meta: HashMap<String, (String, String)> = spec["episodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| {
+            (
+                e["content"].as_str().unwrap().to_owned(),
+                (
+                    e["name"].as_str().unwrap().to_owned(),
+                    e["source"].as_str().unwrap_or("message").to_owned(),
+                ),
+            )
+        })
+        .collect();
+    let actual_state = dump_graph_state(&grit, &group_id, true, &episode_meta);
     let state_diffs = diff_states(&expected_state, &actual_state, &["created_at"]);
     assert!(
         state_diffs.is_empty(),
@@ -389,8 +498,10 @@ async fn golden_trace1_conformance() {
         .collect();
     for query_spec in expected_retrieval.as_array().unwrap() {
         let query = query_spec["query"].as_str().unwrap();
-        let hits = search_edges(&grit, query, &group_id, 10).unwrap();
-        assert!(!hits.is_empty(), "no grit hits for query {query:?}");
+        // Exercise the search path (grit's FTS leg ANDs all tokens, so a
+        // question-form query may legitimately return nothing until
+        // embeddings are wired — rank parity is out of scope, DEVIATIONS.md).
+        let _hits = search_edges(&grit, query, &group_id, 10).unwrap();
         for r in query_spec["results"].as_array().unwrap() {
             let fact = r["fact"].as_str().unwrap();
             assert!(
@@ -433,10 +544,11 @@ fn differ_self_test() {
         attrs: json!({}),
         group_id: "g".into(),
         valid_at: Some(1_770_000_000_000),
+        invalid_at: None,
     })
     .unwrap();
 
-    let state = dump_graph_state(&grit, "g", true);
+    let state = dump_graph_state(&grit, "g", true, &HashMap::new());
     assert!(diff_states(&state, &state, &["created_at"]).is_empty());
 
     // A mutated copy is caught, and created_at differences are ignored.

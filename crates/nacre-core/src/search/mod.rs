@@ -118,6 +118,7 @@ mod tests {
             attrs: json!({}),
             group_id: group.into(),
             valid_at: None,
+            invalid_at: None,
         })
         .unwrap();
     }
