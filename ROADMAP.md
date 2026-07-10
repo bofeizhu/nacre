@@ -110,10 +110,6 @@ increment. Conventions (binding for any agent working this file):
       rule, newer-candidate-expires-new-edge rule, and
       `resolve_edge_contradictions`. Time injected via a `now` parameter.
       This also covers the separate `invalidate/` roadmap item.
-- [ ] Custom edge-attribute extraction (pydantic edge models with fields →
-      `extract_edges.extract_attributes` + `apply_capped_attributes`) —
-      deferred from `dedupe/edges.rs`; not exercised by trace1. Port when a
-      trace or Layer 3 needs custom edge ontologies.
 - [x] `invalidate/`: folded into `dedupe/edges.rs` above (upstream keeps
       dedup + invalidation in one function; splitting would hurt fidelity).
 - [x] `summarize/`: node summary refresh (ports
@@ -160,6 +156,10 @@ increment. Conventions (binding for any agent working this file):
 
 ## Later (do not start without a user decision)
 
+- [ ] Custom edge-attribute extraction (pydantic edge models with fields →
+      `extract_edges.extract_attributes` + `apply_capped_attributes`) —
+      deferred from `dedupe/edges.rs`; not exercised by trace1. Port when a
+      trace or Layer 3 needs custom edge ontologies.
 - Golden traces #2+ (bulk-ish episode volume, group_id isolation, purge).
 - Search cross-encoder reranking evaluation.
 - Communities port. Saga summarization. crates.io publish of nacre-core.
