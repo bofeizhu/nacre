@@ -156,13 +156,10 @@ increment. Conventions (binding for any agent working this file):
       InvalidateEdge for contradictions, AddEpisode last with mentions.
       End-to-end offline test against a real grit DB (two episodes: merge +
       invalidation verified in storage). `now` injected.
-- [ ] BLOCKED(user decision: grit op-vocabulary extension) Persist summary
-      refresh + label promotion: grit v0.1 has no node-update op (AddNode /
-      AddEdge / AddEpisode / InvalidateEdge / MergeNodes / Purge only), so
-      the summarize step's output and dedup label promotion currently can't
-      be written back. Needs a grit-side decision (e.g. a `SetNodeSummary` /
-      `UpdateNode` op — touches the sync vocabulary, convergence property
-      tests, and a grit release + version bump per the umbrella co-dev flow).
+- [x] Persist summary refresh + label promotion — resolved 2026-07-10 by
+      grit 0.2.0's `UpdateNode` (user chose it over SetNodeSummary; per-field
+      LWW, schema v2, released + published). Wired in pipeline.rs; asserted
+      by the green conformance test.
 - [x] `search/`: the default `graphiti.search` surface (EDGE_HYBRID_SEARCH_RRF
       path) over grit's fused hybrid retrieval — edge hits filtered from
       grit's ranking with over-fetch, limit applied; rank-order parity is the
@@ -187,11 +184,87 @@ increment. Conventions (binding for any agent working this file):
       429/5xx retry with backoff. Offline unit tests cover the request
       builder, schema registry, and response parsing. Wrap in
       RecordingModel for capture runs.
-- [ ] BLOCKED(until golden trace #1 exists + embeddings wired) Edge
-      invalidation-candidate gathering parity: pipeline uses 1-hop traversal
-      around the endpoints; upstream gathers candidates by hybrid search
-      over edge facts. Judge against trace #1 retrieval/graph diffs; record
-      in DEVIATIONS.md if the difference survives.
+- [x] Edge invalidation-candidate gathering parity — resolved 2026-07-10:
+      the 1-hop traversal was replaced by engine-free full-group pools
+      (directed same-pair split, fact-sorted) applied identically by the
+      capture harness; membership and order are pinned by every EdgeDuplicate
+      replay lookup in the green conformance test (DEVIATIONS.md "Edge
+      dedup/invalidation candidate pools").
+
+## Milestone 4 — Phase 1.5: retrieval that works (embeddings persisted + query leg)
+
+Rationale: nacre computes embeddings for dedup but never persists them, so
+grit's hybrid search runs FTS-only (AND-semantics; question-form queries
+return nothing) and dedup re-embeds every existing name each episode.
+Division of labor stays sharp: nacre embeds, grit stores and serves back.
+Cross-repo increments use the umbrella co-dev flow — UNCOMMITTED
+`[patch.crates-io]` override while working, grit gets its own full gate
+(`cargo fmt/clippy/test/doc` in ../grit) and its own commit per increment.
+Conformance (`cargo test --test conformance`) is the regression net for
+every step: it must stay green, and fewer/identical embedder requests are
+fine (replay only fails on unrecorded requests nacre makes).
+
+- [ ] grit 0.2.1 (additive, no schema change): embedding getters
+      `get_node_embedding(id)` / `get_edge_embedding(id)` (read the vector a
+      caller stored — the write half already exists) and a group-scan API
+      (`nodes_in_group` / `edges_in_group` / `episodes_in_group` or
+      equivalent, live/all filtering like the export view) so callers stop
+      parsing `export_jsonl`. Doc-commented with examples, unit tests incl.
+      "getter returns exactly what the setter stored" and scan/export
+      consistency. Full gate in ../grit, commit there (version 0.2.1), then
+      add the uncommitted `[patch.crates-io]` override in nacre.
+- [ ] nacre: replace the `export_jsonl`-parse snapshots in pipeline.rs with
+      grit's group-scan API (pure refactor; conformance green proves it).
+- [ ] nacre: persist embeddings at write time, mirroring upstream's
+      `create_entity_node_embeddings` / `create_entity_edge_embeddings`:
+      consult the pinned Python for the exact input strings (e.g.
+      `name.replace('\n', ' ')`) and batch composition, and verify each
+      batch request key exists in trace1's `embedder_recordings.json` BEFORE
+      wiring (the conformance ReplayEmbedder fails loudly on any unrecorded
+      request). `register_embedding_model("embedding-3", 1024, "")` at
+      pipeline setup; `set_node_embedding` after AddNode/UpdateNode(name),
+      `set_edge_embedding` after AddEdge. add_episode signature may grow a
+      setup step; update all callers.
+- [ ] nacre: dedup reads stored vectors — for existing nodes, take
+      `get_node_embedding` instead of re-embedding every name each episode;
+      embed only names with no stored vector. Values are identical (same
+      input string, same recorded vector, same f32 truncation), so candidate
+      pools and prompts do not move; conformance green is the proof.
+- [ ] nacre: query-embedding leg in `search/` — `search_edges` accepts an
+      embedder (or pre-computed query vector), embeds the query the way
+      upstream does for `graphiti.search` (verify the exact input string
+      against the recorded `{"inputs": [query]}` keys in trace1), and passes
+      the vector into grit's `Query` so RRF actually fuses vector + FTS.
+      Update the conformance retrieval sanity block to pass the
+      ReplayEmbedder; a question-form query returning hits is the smoke
+      signal.
+- [ ] nacre: previous-episodes helper — fetch the last-10 window
+      (`RELEVANT_SCHEMA_LIMIT`, occurred_at <= reference, ascending) from
+      grit via the group-scan API, mirroring upstream `retrieve_episodes`;
+      switch the conformance test's hand-threaded window to it (staying
+      green proves the helper reproduces the recorded prompt windows).
+- [ ] nacre: real embedder client behind an `openai-embed` feature flag
+      (reqwest, OpenAI-compatible `/embeddings`, configurable base URL +
+      model + dim truncation — Zhipu embedding-3 is the first target; never
+      compiled into `cargo test` default). Offline unit tests for request
+      building and response parsing only.
+- [ ] nacre: `claude.rs` configurable base URL + API key env (defaults
+      unchanged: api.anthropic.com). Purpose: DeepSeek's Anthropic-style
+      endpoint becomes usable through the same client. Verify whether it
+      supports `output_config` json_schema; if not, add the
+      schema-append-to-prompt fallback (the pattern upstream's
+      OpenAIGenericClient json_object mode uses — nacre ported its prompt
+      side already).
+- [ ] Live smoke example (`examples/`, feature-gated, requires env keys,
+      NEVER in cargo test): ingest a handful of real conversation turns with
+      a live LLM (Claude or DeepSeek) + live Zhipu embeddings into a fresh
+      grit file, then run a few searches and print results with provenance.
+      First end-to-end run outside replay; expect to shake out retry/rate
+      limit/error-surface gaps — fix them as part of this task.
+- [ ] BLOCKED(user: cargo publish) Release grit 0.2.1 to crates.io, drop
+      nacre's patch override, regenerate Cargo.lock against the registry,
+      full gates both repos, commit + push both. Nacre's `grit-core = "0.2"`
+      requirement already accepts 0.2.1.
 
 ## Later (do not start without a user decision)
 
