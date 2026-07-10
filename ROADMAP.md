@@ -145,8 +145,12 @@ increment. Conventions (binding for any agent working this file):
       search over edge facts. Revisit once embeddings are wired (grit search
       needs vectors) and judge against golden trace #1 — record in
       DEVIATIONS.md if the difference survives.
-- [ ] `search/`: search orchestration over grit's legs — config recipes,
-      filters, fusion parity (ports `search/` minus Cypher generation).
+- [x] `search/`: the default `graphiti.search` surface (EDGE_HYBRID_SEARCH_RRF
+      path) over grit's fused hybrid retrieval — edge hits filtered from
+      grit's ranking with over-fetch, limit applied; rank-order parity is the
+      conformance target (score parity impossible by construction). Advanced
+      recipes (MMR, node-distance, cross-encoder, communities) deliberately
+      not ported per AGENTS.md.
 - [ ] Conformance harness: `tests/conformance.rs` loading `oracle/` fixtures,
       diffing graph state field-for-field and retrieval by rank.
       BLOCKED(until golden trace #1 exists) for the assertion half; the

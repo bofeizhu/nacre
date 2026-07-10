@@ -20,6 +20,7 @@ pub mod model;
 pub mod pipeline;
 pub mod prompts;
 pub mod schemas;
+pub mod search;
 pub mod summarize;
 
 pub use grit_core;
