@@ -14,4 +14,6 @@
 
 #![deny(unsafe_code)]
 
+pub mod model;
+
 pub use grit_core;

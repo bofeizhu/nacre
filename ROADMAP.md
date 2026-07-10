@@ -16,12 +16,15 @@ increment. Conventions (binding for any agent working this file):
 
 ## Milestone 2 groundwork + Rust replay infrastructure (offline, unblocked)
 
-- [ ] `model/` module in nacre-core: `LanguageModel` + `Embedder` async traits
+- [x] `model/` module in nacre-core: `LanguageModel` + `Embedder` async traits
       (tokio), request/response types mirroring what Graphiti's pipeline needs
       (structured JSON output against a schema; batched embeddings). Include a
-      `RecordingStore` (JSON files, keyed by request-content hash) and a
-      `ReplayModel` that serves recordings and **fails loudly on a miss**.
-      Unit tests with hand-written recordings.
+      `RecordingStore` (JSON files, keyed by **canonical request JSON** — not
+      hash, so misses are eye-diffable and Python's
+      `json.dumps(sort_keys=True)` writes the same format), a `ReplayModel` /
+      `ReplayEmbedder` that serve recordings and **fail loudly on a miss**,
+      and a `RecordingModel` capture wrapper. Unit tests with hand-written
+      recordings.
 - [ ] Port the prompt *output* models: serde structs for every response schema
       in `refs/graphiti/graphiti_core/prompts/models.py` and the per-prompt
       response models — field names byte-identical to the Python (that's what
