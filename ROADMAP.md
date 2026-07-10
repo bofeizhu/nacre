@@ -373,9 +373,16 @@ motivates; core changes must not alter recorded requests.
       prompt-shaped output stays internal). Exercised end-to-end from
       Node: replay-ingest 2 episodes, then dump/traverse/history/
       mentions/window all verified.
-- [ ] Search: `searchEdges(query, group, limit)` with the embedder config
+- [x] Search: `searchEdges(query, group, limit)` with the embedder config
       from JS ({provider: "zhipu" | "openai-compatible" | "replay", ...});
       hits carry facts, validity, provenance episode ids.
+      → done 2026-07-10: shook out a real search bug — small limits could
+      return ZERO edges because grit's budget was spent on a mixed
+      node-heavy fused ranking (EDGE_OVERFETCH=4 insufficient). Fixed
+      properly in grit 0.2.2 (db1df19): Query::targets(&[SearchKind])
+      filters the fused list BEFORE the budget cut; nacre's search_edges
+      now uses edge-only targets with the exact limit (overfetch deleted).
+      All five trace queries return hits through the FFI at limit 3.
 - [ ] Node-side offline test: a small JS test (node --test) driving
       open → addEpisode(replay recordings from a committed mini-fixture)
       → reads → searchEdges(replay), asserting the outcome deltas and a

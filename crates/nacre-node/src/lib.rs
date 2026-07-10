@@ -20,6 +20,7 @@ use nacre_core::extract::{EpisodeInput, EpisodeSource};
 use nacre_core::pipeline::{
     AddEpisodeOptions, PREVIOUS_EPISODE_WINDOW, add_episode, retrieve_previous_episodes,
 };
+use nacre_core::search::search_edges;
 
 /// The nacre-node crate version (addon load smoke-check).
 #[napi]
@@ -293,6 +294,62 @@ impl Memory {
         episodes.retain(|e| e.occurred_at <= reference.timestamp_millis());
         let start = episodes.len().saturating_sub(last_n);
         Ok(episodes[start..].iter().map(episode_row).collect())
+    }
+}
+
+/// One search hit, in fused rank order.
+#[napi(object)]
+pub struct SearchHitJs {
+    /// Edge id.
+    pub id: String,
+    pub source_id: String,
+    pub target_id: String,
+    /// Relation label.
+    pub name: String,
+    /// The fact sentence.
+    pub fact: String,
+    /// Event time the fact became true.
+    pub valid_at: Option<String>,
+    /// Event time the fact stopped being true.
+    pub invalid_at: Option<String>,
+    /// Provenance episode ids.
+    pub episodes: Vec<String>,
+}
+
+#[napi]
+impl Memory {
+    /// Hybrid recall: the query is embedded and fused (RRF) with BM25 over
+    /// the stored fact embeddings; currently-valid edges return in rank
+    /// order with provenance.
+    #[napi]
+    pub async fn search_edges(
+        &self,
+        query: String,
+        group_id: String,
+        limit: u32,
+        embedder: EmbedderConfig,
+    ) -> Result<Vec<SearchHitJs>> {
+        let embedder = build_embedder(&embedder)?;
+        let hits = search_edges(&self.grit, &embedder, &query, &group_id, limit as usize)
+            .await
+            .map_err(generic)?;
+        Ok(hits
+            .into_iter()
+            .map(|hit| SearchHitJs {
+                id: hit.id,
+                source_id: hit.source_id,
+                target_id: hit.target_id,
+                name: hit.name,
+                fact: hit.fact,
+                valid_at: hit
+                    .valid_at
+                    .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+                invalid_at: hit
+                    .invalid_at
+                    .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+                episodes: hit.episodes,
+            })
+            .collect())
     }
 }
 

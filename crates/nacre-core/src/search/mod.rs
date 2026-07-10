@@ -17,7 +17,7 @@
 //!   are deliberately not ported — see AGENTS.md "not ported".
 
 use chrono::{DateTime, Utc};
-use grit_core::{Budget, Grit, Query, SearchTarget};
+use grit_core::{Budget, Grit, Query, SearchKind, SearchTarget};
 use serde::{Deserialize, Serialize};
 
 use crate::model::Embedder;
@@ -26,10 +26,6 @@ use crate::pipeline::PipelineError;
 /// Upstream's default result limit.
 // ports: graphiti_core/helpers.py::DEFAULT_SEARCH_LIMIT
 pub const DEFAULT_SEARCH_LIMIT: usize = 10;
-
-/// Over-fetch multiplier: grit's budget spans all target kinds, so ask for
-/// more items than needed and keep the first `limit` edges.
-const EDGE_OVERFETCH: usize = 4;
 
 /// One edge hit, in fused rank order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +63,9 @@ pub async fn search_edges<E: Embedder>(
     group_id: &str,
     num_results: usize,
 ) -> Result<Vec<EdgeSearchResult>, PipelineError> {
+    if num_results == 0 {
+        return Ok(Vec::new());
+    }
     // ports: search/search.py — `embedder.create(input_data=[query.replace('\n', ' ')])`
     // (verified against trace1's recorded singleton query batches)
     let query_vector = embedder
@@ -75,13 +74,15 @@ pub async fn search_edges<E: Embedder>(
         .into_iter()
         .next()
         .unwrap_or_default();
+    // Edge-only targets: the budget is spent on edges alone (upstream's
+    // recipe ranks edges only), so small limits work even when nodes
+    // dominate the fused ranking. grit ≥0.2.2.
     let hits = grit.search(
         Query::text(query)
             .vector(query_vector)
             .group(group_id)
-            .budget(Budget::items(
-                num_results.saturating_mul(EDGE_OVERFETCH).max(1),
-            )),
+            .targets(&[SearchKind::Edge])
+            .budget(Budget::items(num_results.max(1))),
     )?;
     let ms = |t: i64| DateTime::<Utc>::from_timestamp_millis(t);
     Ok(hits
