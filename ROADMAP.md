@@ -116,7 +116,14 @@ increment. Conventions (binding for any agent working this file):
       trace or Layer 3 needs custom edge ontologies.
 - [x] `invalidate/`: folded into `dedupe/edges.rs` above (upstream keeps
       dedup + invalidation in one function; splitting would hurt fidelity).
-- [ ] `summarize/`: node summary refresh (ports `summarize_nodes` usage).
+- [x] `summarize/`: node summary refresh (ports
+      `_extract_entity_summaries_batch` + `_process_summary_flight` +
+      `truncate_at_sentence` + `_truncate_type_description`): fact-append
+      shortcut under 2×MAX_SUMMARY_CHARS, MAX_NODES=30 flights (sequential —
+      recordings identical to upstream's concurrent flights), small-model
+      SummarizedEntities calls, case-insensitive name application with
+      sentence-aware truncation, skip_fact_appending episode-prompt path,
+      per-node filter hook.
 - [ ] `pipeline.rs`: `add_episode` seam stringing the steps, emitting +
       applying the `GraphOp` stream (ports `graphiti.py::add_episode`
       orchestration; date handling via injected Clock).

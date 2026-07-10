@@ -19,5 +19,6 @@ pub mod extract;
 pub mod model;
 pub mod prompts;
 pub mod schemas;
+pub mod summarize;
 
 pub use grit_core;
