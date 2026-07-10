@@ -235,6 +235,13 @@ fine (replay only fails on unrecorded requests nacre makes).
       pipeline setup; `set_node_embedding` after AddNode/UpdateNode(name),
       `set_edge_embedding` after AddEdge. add_episode signature may grow a
       setup step; update all callers.
+      → done 2026-07-10 (eefdf21): verified batch formats first — node batch
+      is RAW names (no newline replace; that's the singleton path only),
+      per-draft RESOLVED names with duplicates preserved; edge batch is raw
+      draft facts post-dedup. register_embedding_model runs from
+      Embedder::meta() each add_episode (idempotent). Signature unchanged.
+      Conformance now also asserts every live node + every edge carries a
+      1024-dim vector.
 - [ ] nacre: dedup reads stored vectors — for existing nodes, take
       `get_node_embedding` instead of re-embedding every name each episode;
       embed only names with no stored vector. Values are identical (same

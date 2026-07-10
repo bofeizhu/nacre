@@ -487,6 +487,32 @@ async fn golden_trace1_conformance() {
         state_diffs.join("\n")
     );
 
+    // Embeddings persisted: every live node and every edge got its vector
+    // from the recorded batches (1024-dim, the trace's EMBEDDING_DIM).
+    let mut embedded_nodes = 0;
+    for n in grit.nodes_in_group(&group_id).unwrap() {
+        if n.expired_at.is_none() {
+            let v = grit.get_node_embedding(n.id).unwrap();
+            assert_eq!(
+                v.as_ref().map(Vec::len),
+                Some(1024),
+                "live node {} missing its name embedding",
+                n.name
+            );
+            embedded_nodes += 1;
+        }
+    }
+    assert!(embedded_nodes > 0);
+    for e in grit.edges_in_group(&group_id).unwrap() {
+        let v = grit.get_edge_embedding(e.id).unwrap();
+        assert_eq!(
+            v.as_ref().map(Vec::len),
+            Some(1024),
+            "edge {:?} missing its fact embedding",
+            e.fact
+        );
+    }
+
     // Retrieval sanity only — rank order is deliberately not asserted (see
     // module docs / DEVIATIONS.md): every fixture result must exist in the
     // ingested corpus, and every query must return hits from grit.

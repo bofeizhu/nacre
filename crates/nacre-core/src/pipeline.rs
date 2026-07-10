@@ -173,6 +173,16 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
 ) -> Result<AddEpisodeOutcome, PipelineError> {
     let episodes = std::slice::from_ref(episode);
 
+    // Vectors persist under the embedder's identity (idempotent for a
+    // same-dimension model; a dimension change fails loudly — grit has no
+    // re-embedding flow yet).
+    let embedder_meta = embedder.meta();
+    grit.register_embedding_model(
+        &embedder_meta.model_id,
+        embedder_meta.dim as usize,
+        &embedder_meta.model_version,
+    )?;
+
     // 1. Extract entity drafts.
     let drafts =
         extract::nodes::extract_nodes(model, episodes, previous_episodes, &options.extract_nodes)
@@ -346,6 +356,25 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
         })
         .collect();
 
+    // Embed the extracted facts in one batch, mirroring upstream's
+    // pre-resolution `create_entity_edge_embeddings(embedder, extracted_edges)`:
+    // inputs are the RAW fact strings in draft order, empty facts filtered.
+    // ports: graphiti_core/edges.py::create_entity_edge_embeddings
+    // (verified against trace1 embedder_recordings.json — e.g. ep-3's batch
+    // is the three post-dedup draft facts, unmodified)
+    let fact_inputs: Vec<String> = draft_edges
+        .iter()
+        .filter(|edge| !edge.fact.is_empty())
+        .map(|edge| edge.fact.clone())
+        .collect();
+    let mut fact_vectors: std::collections::HashMap<&str, Vec<f32>> =
+        std::collections::HashMap::new();
+    if !fact_inputs.is_empty() {
+        for (input, vector) in fact_inputs.iter().zip(embedder.embed(&fact_inputs).await?) {
+            fact_vectors.insert(input.as_str(), vector);
+        }
+    }
+
     // 5. Resolve each edge against stored context and apply the decisions.
     let episode_id = grit.new_id();
     let episode_ref = EpisodeRef {
@@ -463,6 +492,9 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
                     valid_at: resolution.resolved.valid_at.map(|t| t.timestamp_millis()),
                     invalid_at: resolution.resolved.invalid_at.map(|t| t.timestamp_millis()),
                 })?;
+                if let Some(vector) = fact_vectors.get(draft_edge.fact.as_str()) {
+                    grit.set_edge_embedding(edge_id, vector.clone())?;
+                }
                 new_edge_ids.push(edge_id);
                 mentioned_edges.push(edge_id);
                 new_edge_tuples.push((src.to_string(), dst.to_string(), draft_edge.fact.clone()));
@@ -548,7 +580,30 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
         }
     }
 
-    // 7. The episode itself, with provenance for everything it evidenced.
+    // 7. Persist node name embeddings, mirroring upstream's
+    //    `create_entity_node_embeddings(embedder, hydrated_nodes)`: inputs
+    //    are the RAW resolved node names, one per draft (a canonical node
+    //    resolved from two drafts appears twice), empty names filtered.
+    // ports: graphiti_core/nodes.py::create_entity_node_embeddings
+    // (verified against trace1 embedder_recordings.json — ep-3's batch is
+    // ["Priya", "Northwind Labs", "Meridian Health", "Marco", "Priya",
+    //  "Sam Okafor"]: per-draft RESOLVED names, duplicates preserved)
+    let mut name_inputs: Vec<String> = Vec::with_capacity(final_ids.len());
+    let mut name_targets: Vec<Uuid> = Vec::with_capacity(final_ids.len());
+    for &id in &final_ids {
+        let name = grit.node(id)?.expect("resolved node exists").name;
+        if !name.is_empty() {
+            name_inputs.push(name);
+            name_targets.push(id);
+        }
+    }
+    if !name_inputs.is_empty() {
+        for (&id, vector) in name_targets.iter().zip(embedder.embed(&name_inputs).await?) {
+            grit.set_node_embedding(id, vector)?;
+        }
+    }
+
+    // 8. The episode itself, with provenance for everything it evidenced.
     let occurred_at = episode
         .valid_at
         .as_deref()
