@@ -394,15 +394,16 @@ fn trace_episode(spec: &Value) -> EpisodeInput {
     }
 }
 
-/// End-to-end: replay golden trace #1 through nacre + grit and diff.
-/// Skips (loudly) until the capture run has produced the fixture.
-#[tokio::test]
-async fn golden_trace1_conformance() {
-    let trace_dir = oracle_dir().join("fixtures/trace1");
+/// End-to-end: replay one golden trace through nacre + grit and diff.
+/// One `#[tokio::test]` per fixture directory under oracle/fixtures/ calls
+/// this; each skips (loudly) until its capture run has produced the
+/// fixture.
+async fn run_trace(trace: &str) {
+    let trace_dir = oracle_dir().join("fixtures").join(trace);
     let graph_state_path = trace_dir.join("graph_state.json");
     if !graph_state_path.exists() {
         eprintln!(
-            "SKIP: golden trace #1 not captured yet ({}). Run oracle/capture.py first.",
+            "SKIP: golden trace {trace:?} not captured yet ({}). Run oracle/capture.py first.",
             graph_state_path.display()
         );
         return;
@@ -430,7 +431,7 @@ async fn golden_trace1_conformance() {
     let group_id = spec["group_id"].as_str().unwrap().to_owned();
     let dir = std::env::temp_dir().join(format!("nacre-conformance-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("trace1.db");
+    let path = dir.join(format!("{trace}.db"));
     let _ = std::fs::remove_file(&path);
     let grit = Grit::open(&path, grit_core::Options::new("nacre-conformance")).unwrap();
 
@@ -444,9 +445,16 @@ async fn golden_trace1_conformance() {
             .map(|t| t.with_timezone(&Utc))
             .unwrap_or_else(|| Utc.with_ymd_and_hms(2026, 7, 10, 0, 0, 0).unwrap());
         // The context window comes from grit itself — staying green proves
-        // the helper reproduces the recorded prompt windows byte-for-byte.
-        let previous =
-            retrieve_previous_episodes(&grit, &group_id, now, PREVIOUS_EPISODE_WINDOW).unwrap();
+        // the helper reproduces the recorded prompt windows byte-for-byte
+        // (including upstream's filter by the current episode's source).
+        let previous = retrieve_previous_episodes(
+            &grit,
+            &group_id,
+            episode.source,
+            now,
+            PREVIOUS_EPISODE_WINDOW,
+        )
+        .unwrap();
         add_episode(
             &grit,
             &model,
@@ -478,7 +486,7 @@ async fn golden_trace1_conformance() {
     let state_diffs = diff_states(&expected_state, &actual_state, &["created_at"]);
     assert!(
         state_diffs.is_empty(),
-        "graph state diverges from golden trace #1:\n{}",
+        "graph state diverges from golden trace {trace:?}:\n{}",
         state_diffs.join("\n")
     );
 
@@ -534,6 +542,18 @@ async fn golden_trace1_conformance() {
             );
         }
     }
+}
+
+#[tokio::test]
+async fn golden_trace1_conformance() {
+    run_trace("trace1").await;
+}
+
+/// Trace #2: text/json episode sources (prompt routing + cross-source
+/// dedup and invalidation).
+#[tokio::test]
+async fn golden_trace2_conformance() {
+    run_trace("trace2").await;
 }
 
 /// The differ must be able to certify identity and catch real differences —

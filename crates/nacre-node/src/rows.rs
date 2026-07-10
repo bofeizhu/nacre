@@ -59,8 +59,12 @@ pub struct EdgeRow {
 #[napi(object)]
 pub struct EpisodeRow {
     pub id: String,
-    /// Source description as stored (e.g. "message", "doc:notes.md").
+    /// Source description as stored (e.g. "chat between friends",
+    /// "doc:notes.md").
     pub source: String,
+    /// Source-kind tag: "message", "text", or "json" (empty for episodes
+    /// written before grit 0.2.2).
+    pub kind: String,
     pub content: String,
     /// Event time of the episode.
     pub occurred_at: String,
@@ -131,6 +135,7 @@ pub fn episode_row(e: &grit_core::Episode) -> EpisodeRow {
     EpisodeRow {
         id: e.id.to_string(),
         source: e.source.clone(),
+        kind: e.kind.clone(),
         content: e.content.clone(),
         occurred_at: iso(e.occurred_at),
         group_id: e.group_id.clone(),

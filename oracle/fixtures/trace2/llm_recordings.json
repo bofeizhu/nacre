@@ -1,0 +1,885 @@
+[
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are an entity extraction specialist for conversational messages. NEVER extract abstract concepts, feelings, or generic words.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER extract any of the following:\n- Pronouns (you, me, I, he, she, they, we, us, it, them, him, her, this, that, those)\n- Abstract concepts or feelings (joy, balance, growth, resilience, happiness, passion, motivation)\n- Generic common nouns or bare object words (day, life, people, work, stuff, things, food, time,\n  way, tickets, supplies, clothes, keys, gear)\n- Generic media/content nouns unless uniquely identified in the node name itself (photo, pic, picture,\n  image, video, post, story)\n- Generic event/activity nouns unless uniquely identified in the node name itself (event, game, meeting,\n  class, workshop, competition)\n- Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,\n  team, office)\n- Ambiguous bare nouns whose meaning depends on sentence context rather than the node name itself\n- Sentence fragments or clauses (\"what you really care about\", \"results of that effort\")\n- Adjectives or descriptive phrases (\"amazing\", \"something different\", \"new hair color\")\n- Duplicate references to the same real-world entity. Extract each entity at most once per message,\n  even if it appears multiple times or both as a speaker label and in the body text.\n- Bare relational or kinship terms (dad, mom, mother, father, sister, brother, husband, wife,\n  spouse, son, daughter, uncle, aunt, cousin, grandma, grandpa, friend, boss, teacher, neighbor,\n  roommate) and bare animal/pet words (dog, cat, pet, puppy, kitten). These are too generic on\n  their own. Instead, qualify them with the possessor: extract \"Nisha's dad\" not \"dad\",\n  \"Jordan's dog\" not \"dog\".\n- Bare generic objects that cannot be meaningfully qualified with a possessor, brand, or\n  distinguishing detail (e.g., NEVER extract \"supplies\" from \"I picked up some supplies\")\n\nYour task is to extract **entity nodes** that are **explicitly** mentioned in the CURRENT MESSAGE.\nPronoun references such as he/she/they or this/that/those should be disambiguated to the names of the\nreference entities. Only extract distinct entities from the CURRENT MESSAGE.\n\n<ENTITY TYPES>\n[{'entity_type_id': 0, 'entity_type_name': 'Entity', 'entity_type_description': 'A specific, identifiable entity that does not fit any of the other listed types. Must still be a concrete, meaningful thing — specific enough to be uniquely identifiable. GOOD: a named entity not covered by the other types. BAD: \"luck\", \"ideas\", \"tomorrow\", \"things\", \"them\", \"everybody\", \"a sense of wonder\", \"great times\". When in doubt, do not extract the entity.'}]\n</ENTITY TYPES>\n\n<PREVIOUS MESSAGES>\n[]\n</PREVIOUS MESSAGES>\n\n<CURRENT MESSAGE>\nDana: Did you see Harborview Robotics just raised a Series B? Their CEO Elena Vasquez was on the funding panel last week.\nLeo: Yeah — the Atlas arm demo was slick. They're based in Lisbon, right?\n</CURRENT MESSAGE>\n\n1. **Speaker Extraction**: Always extract the speaker (the part before the colon `:` in each dialogue line) as the first entity node.\n   - If the speaker is mentioned again in the message, treat both mentions as a **single entity**.\n\n2. **Entity Identification**:\n   - Extract named entities and specific, concrete things that are **explicitly** mentioned in the CURRENT MESSAGE.\n   - Only extract entities that are specific enough to be uniquely identifiable. Ask: \"Could this have its own Wikipedia article or database entry, OR is it specific enough to distinguish from other items of the same category within this conversation?\"\n   - For objects, possessions, and physical items, extract when they are specific enough\n     to distinguish from other items of the same category. SHOULD be extracted:\n     - Brand-named items (\"Gamecube\", \"Ford Mustang\", \"Moen faucet\")\n     - Qualified items (\"wool coat\", \"red and purple lighting\", \"cracked windshield\",\n       \"dog leash\")\n     - Items with a concrete distinguishing descriptor (color, material, size, model,\n       owner, specific use)\n     Should NOT be extracted:\n     - Bare head nouns alone (\"car\", \"coat\", \"game\", \"lighting\", \"windshield\")\n   - When a speaker or named person refers to a relative, pet, or associate using a bare term\n     (e.g., \"my dad\", \"his cat\"), extract the entity qualified with the possessor's name\n     (e.g., \"Nisha's dad\", \"Jordan's cat\"). Do NOT extract the bare term alone.\n   - **Exclude** entities mentioned only in the PREVIOUS MESSAGES (they are for context only).\n\n3. **Entity Classification**:\n   - Use the descriptions in ENTITY TYPES to classify each extracted entity.\n   - Assign the appropriate `entity_type_id` for each one.\n\n4. **Exclusions**:\n   - Do NOT extract entities representing relationships or actions.\n   - Do NOT extract dates, times, or other temporal information — these will be handled separately.\n   - When in doubt, do NOT extract.\n\n5. **Specificity**:\n   - Always use the **most specific form** mentioned in the message. If the message says \"road cycling\",\n     extract \"road cycling\" not \"cycling\". If it says \"wool coat\", extract \"wool coat\" not \"coat\".\n   - When context makes an object's type clear, include that context in the name. For example, if the\n     message mentions forgetting a leash while discussing a dog walk, extract \"dog leash\" not \"leash\".\n   - If a phrase would not be distinguishable when read alone later, do NOT extract it.\n\n6. **Formatting**:\n   - Be **explicit and unambiguous** in naming entities (e.g., use full names when available).\n\n<EXAMPLE>\nMessage: \"Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\"\nGood extractions: \"Jordan\" (speaker), \"Denver\" (Location), \"Lockheed Martin\" (Organization), \"Belmont Arts Center\" (Location), \"ceramics\" (Topic)\nDo NOT extract: \"spouse\" (generic reference — extract only if named), \"new role\" (not an entity), \"last month\" (temporal), \"we\" (pronoun)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Nisha: My dad is visiting next week. He loves walking his dogs in Riverside Park.\"\nGood extractions: \"Nisha\" (speaker), \"Nisha's dad\" (Person), \"Riverside Park\" (Location)\nDo NOT extract: \"dad\" (bare relational term — qualify as \"Nisha's dad\"), \"dogs\" (bare animal word — no specific identity), \"next week\" (temporal)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Mary: I forgot Trigger's leash so I couldn't take him on a dog walk. After that I went road cycling in my new wool coat.\"\nGood extractions: \"Mary\" (speaker), \"Trigger\" (animal name), \"dog leash\" (Object), \"road cycling\" (Topic), \"wool coat\" (Object)\nDo NOT extract: \"leash\" (too generic — use \"dog leash\"), \"cycling\" (too generic — use \"road cycling\"), \"coat\" (too generic — use \"wool coat\"), \"dog walk\" (activity, not an entity)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Nate: My gaming room has red and purple lighting and I mostly play on a Gamecube. Last week the windshield on my Mustang got cracked.\"\nGood extractions: \"Nate\" (speaker), \"gaming room\" (Object), \"red and purple lighting\" (Object), \"Gamecube\" (Object), \"Mustang\" (Object), \"cracked windshield\" (Object)\nDo NOT extract: \"lighting\" (bare head noun — use \"red and purple lighting\"), \"windshield\" (bare head noun — use \"cracked windshield\"), \"week\" (temporal)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Alex: I shared a pic from the game after the event.\"\nGood extractions: \"Alex\" (speaker)\nDo NOT extract: \"pic\" (generic media noun), \"game\" (generic event noun), \"event\" (generic event noun)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Jordan: We won by a tight score. Scoring that last basket felt incredible.\"\nGood extractions: \"Jordan\" (speaker)\nDo NOT extract: \"basket\" (ambiguous bare noun that depends on sentence context)\n</EXAMPLE>\n\n\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "medium",
+   "schema_name": "ExtractedEntities"
+  },
+  "response": {
+   "extracted_entities": [
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Dana"
+    },
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Leo"
+    },
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Harborview Robotics"
+    },
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Elena Vasquez"
+    },
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Atlas arm demo"
+    },
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Lisbon"
+    }
+   ]
+  }
+ },
+ {
+  "request": {
+   "max_tokens": 16384,
+   "messages": [
+    {
+     "content": "You are an expert fact extractor that extracts fact triples from text. 1. Extracted fact triples should also be extracted with relevant date information. 2. The CURRENT_MESSAGE may contain multiple episodes, each with its own timestamp. Use each episode's timestamp to resolve temporal references within that episode. REFERENCE_TIME is a fallback for when no per-episode timestamp is available.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\n<PREVIOUS_MESSAGES>\n[]\n</PREVIOUS_MESSAGES>\n\n<CURRENT_MESSAGE>\nDana: Did you see Harborview Robotics just raised a Series B? Their CEO Elena Vasquez was on the funding panel last week.\nLeo: Yeah — the Atlas arm demo was slick. They're based in Lisbon, right?\n</CURRENT_MESSAGE>\n\n<ENTITIES>\n[{\"name\": \"Dana\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Leo\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Harborview Robotics\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Elena Vasquez\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Atlas arm demo\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Lisbon\", \"entity_types\": [\"Entity\"]}]\n</ENTITIES>\n\n<REFERENCE_TIME>\n2026-05-04 10:15:00+00:00  # ISO 8601 (UTC); used to resolve relative time mentions\n</REFERENCE_TIME>\n\n# TASK\nExtract all factual relationships between the given ENTITIES based on the CURRENT MESSAGE.\nOnly extract facts that:\n- involve two DISTINCT ENTITIES from the ENTITIES list,\n- are clearly stated or unambiguously implied in the CURRENT MESSAGE,\n    and can be represented as edges in a knowledge graph.\n- Facts should include entity names rather than pronouns whenever possible.\n\nYou may use information from the PREVIOUS MESSAGES only to disambiguate references or support continuity.\n\n\n\n\n# EXTRACTION RULES\n\n1. **Entity Name Validation**: `source_entity_name` and `target_entity_name` must use only the `name` values from the ENTITIES list provided above.\n   - **CRITICAL**: Using names not in the list will cause the edge to be rejected\n2. Each fact must involve two **distinct** entities — `source_entity_name` and `target_entity_name` NEVER refer to the same entity.\n3. Prefer facts that involve two distinct entities from the ENTITIES list. When a sentence describes a specific, concrete detail about a single entity (a brand name, a specific item, a physical description, a quantity, a location, a named activity), do NOT drop it. Instead, look for a second entity in the ENTITIES list that the detail relates to and form a proper triple (e.g., Entity -> OWNS -> item-entity, Entity -> LIVES_IN -> place-entity, Entity -> HAS_ATTRIBUTE -> detail-entity). Only skip the fact when no second entity in the ENTITIES list can anchor the detail.\n   - BAD: \"Alice feels happy\" (vague single-entity state with no concrete detail — what is Alice happy about?)\n   - GOOD: \"Alice feels happy about Bob's promotion\" → Alice -> FEELS_HAPPY_ABOUT -> Bob's promotion\n   - GOOD: \"Nate plays games on a Gamecube\" → Nate -> PLAYS_GAMES_ON -> Gamecube (when \"Gamecube\" is in ENTITIES)\n   - GOOD: \"Alice congratulated Bob\" (relationship between two entities), \"Alice lives in Paris\" (relationship between entity and place)\n4. Do not emit semantically redundant facts, even across episodes within the CURRENT_MESSAGE. However, if a later episode adds specific details to a previously stated fact (e.g., adding a brand name, a count, a color, a location, or any concrete attribute), extract the more detailed version as a NEW fact — it is NOT a duplicate. Only treat facts as duplicates when they convey the same specificity.\n   - NOT a duplicate: \"user plays video games\" (Episode 0) vs. \"user plays games on a Gamecube\" (Episode 1) → extract the second, more detailed fact.\n   - IS a duplicate: \"user plays games on a Gamecube\" (Episode 0) vs. \"user plays Gamecube games\" (Episode 1) → extract once, list both episodes in `episode_indices`.\n5. The `fact` MUST preserve all specific details from the source text: proper nouns, brand names, product names, model numbers, quantities, counts, colors, materials, physical descriptions, specific items, named locations, and named activities. Paraphrase the sentence structure but NEVER generalize:\n   - NEVER generalize \"Gamecube\" to \"gaming console\", \"Ford Mustang\" to \"car\", \"wool coat\" to \"coat\", \"red and purple lighting\" to \"lighting\", \"cracked windshield\" to \"car damage\", or \"three screenplays\" to \"several screenplays\".\n   - Do not verbatim quote the original text, but every concrete noun, number, and descriptor in the source should survive into the `fact`.\n6. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., \"last week\"). When the CURRENT_MESSAGE contains multiple episodes with per-episode timestamps, prefer the timestamp of the specific episode the fact originates from.\n7. Do **not** hallucinate or infer temporal bounds from unrelated events.\n\n# RELATION TYPE RULES\n\n- If FACT_TYPES are provided and the relationship matches one of the types (considering the entity type signature), use that fact_type_name as the `relation_type`.\n- Otherwise, derive a `relation_type` from the relationship predicate in SCREAMING_SNAKE_CASE (e.g., WORKS_AT, LIVES_IN, IS_FRIENDS_WITH).\n\n# DATETIME RULES\n\n- Use ISO 8601 with \"Z\" suffix (UTC) (e.g., 2025-04-30T00:00:00Z).\n- If the fact is ongoing (present tense), set `valid_at` to the timestamp of the episode the fact originates from. If no per-episode timestamp is available, use REFERENCE_TIME.\n- If a change/termination is expressed, set `invalid_at` to the relevant timestamp.\n- Leave both fields `null` if no explicit or resolvable time is stated.\n- If only a date is mentioned (no time), assume 00:00:00.\n- If only a year is mentioned, use January 1st at 00:00:00.\n        ",
+     "role": "user"
+    }
+   ],
+   "model_size": "medium",
+   "schema_name": "ExtractedEdges"
+  },
+  "response": {
+   "edges": [
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Elena Vasquez is the CEO of Harborview Robotics.",
+     "invalid_at": null,
+     "relation_type": "HAS_CEO",
+     "source_entity_name": "Harborview Robotics",
+     "target_entity_name": "Elena Vasquez",
+     "valid_at": null
+    },
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Harborview Robotics had an Atlas arm demo that was slick.",
+     "invalid_at": null,
+     "relation_type": "HAS_DEMO",
+     "source_entity_name": "Harborview Robotics",
+     "target_entity_name": "Atlus arm demo",
+     "valid_at": null
+    },
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Harborview Robotics is based in Lisbon.",
+     "invalid_at": null,
+     "relation_type": "BASED_IN",
+     "source_entity_name": "Harborview Robotics",
+     "target_entity_name": "Lisbon",
+     "valid_at": null
+    }
+   ]
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You extract temporal bounds from facts. NEVER hallucinate dates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "Given a FACT and its REFERENCE TIME, determine when the fact became true\n(valid_at) and when it stopped being true (invalid_at).\n\nRules:\n- Resolve relative expressions (\"last week\", \"2 years ago\", \"yesterday\") using REFERENCE TIME.\n- If the fact is ongoing (present tense), set valid_at to REFERENCE TIME.\n- If a change or end is expressed, set invalid_at to the relevant time.\n- Leave both null if no time is stated or resolvable.\n- If only a date is mentioned (no time), assume 00:00:00.\n- Use ISO 8601 with Z suffix (e.g., 2025-04-30T00:00:00Z).\n- Do NOT hallucinate or infer dates from unrelated events.\n\n<FACT>\nElena Vasquez is the CEO of Harborview Robotics.\n</FACT>\n\n<REFERENCE TIME>\n2026-05-04T10:15:00+00:00\n</REFERENCE TIME>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeTimestamps"
+  },
+  "response": {
+   "invalid_at": null,
+   "valid_at": "2026-05-04T10:15:00Z"
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You extract temporal bounds from facts. NEVER hallucinate dates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "Given a FACT and its REFERENCE TIME, determine when the fact became true\n(valid_at) and when it stopped being true (invalid_at).\n\nRules:\n- Resolve relative expressions (\"last week\", \"2 years ago\", \"yesterday\") using REFERENCE TIME.\n- If the fact is ongoing (present tense), set valid_at to REFERENCE TIME.\n- If a change or end is expressed, set invalid_at to the relevant time.\n- Leave both null if no time is stated or resolvable.\n- If only a date is mentioned (no time), assume 00:00:00.\n- Use ISO 8601 with Z suffix (e.g., 2025-04-30T00:00:00Z).\n- Do NOT hallucinate or infer dates from unrelated events.\n\n<FACT>\nHarborview Robotics is based in Lisbon.\n</FACT>\n\n<REFERENCE TIME>\n2026-05-04T10:15:00+00:00\n</REFERENCE TIME>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeTimestamps"
+  },
+  "response": {
+   "invalid_at": null,
+   "valid_at": null
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a helpful assistant that generates concise entity summaries from provided context.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nGiven the MESSAGES and a list of ENTITIES, generate an updated summary for each entity that needs one.\nEach summary must be under 1000 characters.\n\nGuidelines:\n        1. Output only factual content. Never explain what you're doing, why, or mention limitations or constraints.\n        2. Only use the provided messages, entity, and entity context to set attribute values.\n        3. Keep the summary information-dense and entity-specific. STATE FACTS DIRECTLY IN UNDER 1000 CHARACTERS.\n        4. Preserve all materially relevant names, roles, places, dates, counts, and temporal qualifiers that are explicitly supported.\n        5. Prefer compact factual sentences over vague thematic phrasing or meta-language.\n        6. When the durable fact is the content of what was said, state the content directly instead of narrating that it was said.\n        7. Use communication verbs only when the act of speaking, asking, sharing, presenting, announcing, or telling is itself the important fact.\n        8. Never use filler verbs like \"mentioned\", \"described\", \"stated\", \"reported\", \"noted\", \"discussed\", \"referenced\", or \"indicated\" unless the communication act itself is the fact.\n        9. Include temporal anchors when the messages provide them and they help ground the fact.\n        10. Begin with the entity name or a direct fact, not with \"A\", \"An\", \"The\", or \"This is\" unless that wording is part of the entity name.\n\n        Example summary:\n        BAD: \"The context shows John ordered pizza. Due to length constraints, other details are omitted from this summary.\"\n        GOOD: \"John ordered pepperoni pizza from Mario's at 7:30 PM and had it delivered to the office.\"\n        \n\n<MESSAGES>\n[]\n\"Dana: Did you see Harborview Robotics just raised a Series B? Their CEO Elena Vasquez was on the funding panel last week.\\nLeo: Yeah — the Atlas arm demo was slick. They're based in Lisbon, right?\"\n</MESSAGES>\n\n<ENTITIES>\n[{\"name\": \"Dana\", \"summary\": \"\", \"entity_types\": [\"Entity\"], \"attributes\": {}}, {\"name\": \"Leo\", \"summary\": \"\", \"entity_types\": [\"Entity\"], \"attributes\": {}}, {\"name\": \"Atlas arm demo\", \"summary\": \"\", \"entity_types\": [\"Entity\"], \"attributes\": {}}]\n</ENTITIES>\n\nFor each entity, combine relevant information from the MESSAGES with any existing summary content.\nOnly return summaries for entities that have meaningful information to summarize.\nIf an entity has no relevant information in the messages and no existing summary, you may skip it.\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "SummarizedEntities"
+  },
+  "response": {
+   "summaries": [
+    {
+     "name": "Dana",
+     "summary": "Dana asked Leo if he saw that Harborview Robotics raised a Series B and that their CEO Elena Vasquez was on a funding panel the previous week."
+    },
+    {
+     "name": "Leo",
+     "summary": "Leo responded that he saw the news about Harborview Robotics' Series B and commented that their Atlas arm demo was slick, and asked if they are based in Lisbon."
+    },
+    {
+     "name": "Atlas arm demo",
+     "summary": "The Atlas arm demo from Harborview Robotics was described by Leo as slick."
+    }
+   ]
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are an entity extraction specialist for unstructured text. NEVER extract abstract concepts, feelings, or generic words.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER extract:\n- Pronouns (you, me, he, she, they, it, them, him, her, we, us, this, that, those)\n- Abstract concepts (joy, balance, growth, resilience, passion, motivation)\n- Generic common nouns or bare object words (day, life, people, work, stuff, things, food, time,\n  tickets, supplies, clothes, keys, gear)\n- Generic media/content nouns unless uniquely identified in the node name itself (photo, pic, picture,\n  image, video, post, story)\n- Generic event/activity nouns unless uniquely identified in the node name itself (event, game, meeting,\n  class, workshop, competition)\n- Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,\n  team, office)\n- Ambiguous bare nouns whose meaning depends on sentence context rather than the node name itself\n- Sentence fragments or clauses as entity names\n- Bare relational or kinship terms (dad, mom, sister, brother, spouse, friend, boss, pet, dog,\n  cat) unless qualified with a possessor (e.g., \"Nisha's dad\" is acceptable, \"dad\" alone is not)\n- Bare generic objects that cannot be meaningfully qualified with a possessor, brand, or\n  distinguishing detail (e.g., NEVER extract \"supplies\" from \"I picked up some supplies\")\n\nExtract entities from the TEXT that are **explicitly mentioned**.\nFor each entity, classify it using the ENTITY TYPES above.\nOnly extract entities specific enough to be uniquely identifiable — ask: \"Could this have its own Wikipedia article or database entry?\"\n\n<ENTITY TYPES>\n[{'entity_type_id': 0, 'entity_type_name': 'Entity', 'entity_type_description': 'A specific, identifiable entity that does not fit any of the other listed types. Must still be a concrete, meaningful thing — specific enough to be uniquely identifiable. GOOD: a named entity not covered by the other types. BAD: \"luck\", \"ideas\", \"tomorrow\", \"things\", \"them\", \"everybody\", \"a sense of wonder\", \"great times\". When in doubt, do not extract the entity.'}]\n</ENTITY TYPES>\n\n<TEXT>\nHarborview Robotics is a Lisbon-based robotics company founded in 2021 by Elena Vasquez and Rafael Costa. Vasquez serves as chief executive officer, while Costa is the chief technology officer. The company's flagship product, the Atlas arm, is deployed in warehouse automation across Europe.\n</TEXT>\n\nGuidelines:\n1. Extract named entities and specific, concrete things.\n2. Do not create nodes for relationships or actions.\n3. Do not create nodes for temporal information like dates, times or years.\n4. Be explicit in node names, using full names and avoiding abbreviations.\n5. Always use the most specific form from the text (e.g., \"road cycling\" not \"cycling\",\n   \"wool coat\" not \"coat\"). Include qualifying context when it's clear from the text.\n6. When the text refers to a person's relative, pet, or associate by a bare term, qualify the\n   entity with the possessor's name (e.g., \"Dr. Osei's colleague\" not \"colleague\").\n7. If a phrase would not be meaningful and distinguishable when read alone later, do NOT extract it.\n8. When in doubt, do NOT extract.\n\n\n\n<EXAMPLE>\nText: \"Dr. Amara Osei presented her migraine study results at the AAN conference. The study tracked 340 patients using a new CGRP combination protocol.\"\nGood extractions: \"Dr. Amara Osei\" (Person), \"AAN\" (Organization), \"migraine study\" (Topic), \"CGRP combination protocol\" (Object)\nDo NOT extract: \"results\" (generic noun), \"340\" (number), \"patients\" (generic noun), \"conference\" (generic without a specific name)\n</EXAMPLE>\n\n<EXAMPLE>\nText: \"Alex shared a pic after the event and said scoring the last basket felt incredible.\"\nGood extractions: \"Alex\" (Person)\nDo NOT extract: \"pic\" (generic media noun), \"event\" (generic event noun), \"basket\" (ambiguous bare noun)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "medium",
+   "schema_name": "ExtractedEntities"
+  },
+  "response": {
+   "extracted_entities": [
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Harborview Robotics"
+    },
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Elena Vasquez"
+    },
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Rafael Costa"
+    },
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Atlas arm"
+    }
+   ]
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are an entity deduplication assistant. NEVER fabricate entity names or mark distinct entities as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\n<PREVIOUS MESSAGES>\n[]\n</PREVIOUS MESSAGES>\n\n<CURRENT MESSAGE>\nHarborview Robotics is a Lisbon-based robotics company founded in 2021 by Elena Vasquez and Rafael Costa. Vasquez serves as chief executive officer, while Costa is the chief technology officer. The company's flagship product, the Atlas arm, is deployed in warehouse automation across Europe.\n</CURRENT MESSAGE>\n\n<ENTITIES>\n[{\"id\": 0, \"name\": \"Rafael Costa\", \"entity_type\": [\"Entity\"], \"entity_type_description\": \"Default Entity Type\"}, {\"id\": 1, \"name\": \"Atlas arm\", \"entity_type\": [\"Entity\"], \"entity_type_description\": \"Default Entity Type\"}]\n</ENTITIES>\n\n<EXISTING ENTITIES>\n[{\"candidate_id\": 0, \"name\": \"Elena Vasquez\", \"entity_types\": [\"Entity\"], \"summary\": \"Elena Vasquez is the CEO of Harborview Robotics.\"}, {\"candidate_id\": 1, \"name\": \"Lisbon\", \"entity_types\": [\"Entity\"], \"summary\": \"Harborview Robotics is based in Lisbon.\"}, {\"candidate_id\": 2, \"name\": \"Dana\", \"entity_types\": [\"Entity\"], \"summary\": \"Dana asked Leo if he saw that Harborview Robotics raised a Series B and that their CEO Elena Vasquez was on a funding pa\"}, {\"candidate_id\": 3, \"name\": \"Atlas arm demo\", \"entity_types\": [\"Entity\"], \"summary\": \"The Atlas arm demo from Harborview Robotics was described by Leo as slick.\"}, {\"candidate_id\": 4, \"name\": \"Leo\", \"entity_types\": [\"Entity\"], \"summary\": \"Leo responded that he saw the news about Harborview Robotics' Series B and commented that their Atlas arm demo was slick\"}, {\"candidate_id\": 5, \"name\": \"Harborview Robotics\", \"entity_types\": [\"Entity\"], \"summary\": \"Elena Vasquez is the CEO of Harborview Robotics.\\nHarborview Robotics is based in Lisbon.\"}]\n</EXISTING ENTITIES>\n\nEach of the above ENTITIES was extracted from the CURRENT MESSAGE.\nFor each entity, determine if it is a duplicate of any EXISTING ENTITY.\nEntities should only be considered duplicates if they refer to the *same real-world object or concept*.\n\nNEVER mark entities as duplicates if:\n- They are related but distinct.\n- They have similar names or purposes but refer to separate instances or concepts.\n\nTask:\nENTITIES contains 2 entities with IDs 0 through 1.\nYour response MUST include EXACTLY 2 resolutions with IDs 0 through 1. Do not skip or add IDs.\n\nFor every entity, provide:\n- `id`: integer id from ENTITIES\n- `name`: the best full name for the entity (preserve the original name unless a duplicate has a more complete name)\n- `duplicate_candidate_id`: the `candidate_id` of the EXISTING ENTITY that is the best duplicate match, or -1 if there is no duplicate\n\n<EXAMPLE>\nENTITY: \"Sam\" (Person)\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Sam\", \"entity_types\": [\"Person\"], \"summary\": \"Sam enjoys hiking and photography\"}]\nResult: duplicate_candidate_id = 0 (same person referenced in conversation)\n\nENTITY: \"NYC\"\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"New York City\", \"entity_types\": [\"Location\"]}, {\"candidate_id\": 1, \"name\": \"New York Knicks\", \"entity_types\": [\"Organization\"]}]\nResult: duplicate_candidate_id = 0 (same location, abbreviated name)\n\nENTITY: \"Java\" (programming language)\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Java\", \"entity_types\": [\"Location\"], \"summary\": \"An island in Indonesia\"}]\nResult: duplicate_candidate_id = -1 (same name but distinct real-world things)\n\nENTITY: \"Marco's car\"\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Marco's vehicle\", \"entity_types\": [\"Entity\"], \"summary\": \"Marco drives a red sedan.\"}]\nResult: duplicate_candidate_id = 0 (synonym — \"car\" and \"vehicle\" refer to the same thing, same possessor)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "medium",
+   "schema_name": "NodeResolutions"
+  },
+  "response": {
+   "entity_resolutions": [
+    {
+     "duplicate_candidate_id": -1,
+     "id": 0,
+     "name": "Rafael Costa"
+    },
+    {
+     "duplicate_candidate_id": 3,
+     "id": 1,
+     "name": "Atlas arm"
+    }
+   ]
+  }
+ },
+ {
+  "request": {
+   "max_tokens": 16384,
+   "messages": [
+    {
+     "content": "You are an expert fact extractor that extracts fact triples from text. 1. Extracted fact triples should also be extracted with relevant date information. 2. The CURRENT_MESSAGE may contain multiple episodes, each with its own timestamp. Use each episode's timestamp to resolve temporal references within that episode. REFERENCE_TIME is a fallback for when no per-episode timestamp is available.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\n<PREVIOUS_MESSAGES>\n[]\n</PREVIOUS_MESSAGES>\n\n<CURRENT_MESSAGE>\nHarborview Robotics is a Lisbon-based robotics company founded in 2021 by Elena Vasquez and Rafael Costa. Vasquez serves as chief executive officer, while Costa is the chief technology officer. The company's flagship product, the Atlas arm, is deployed in warehouse automation across Europe.\n</CURRENT_MESSAGE>\n\n<ENTITIES>\n[{\"name\": \"Harborview Robotics\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Elena Vasquez\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Rafael Costa\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Atlas arm\", \"entity_types\": [\"Entity\"]}]\n</ENTITIES>\n\n<REFERENCE_TIME>\n2026-05-20 09:00:00+00:00  # ISO 8601 (UTC); used to resolve relative time mentions\n</REFERENCE_TIME>\n\n# TASK\nExtract all factual relationships between the given ENTITIES based on the CURRENT MESSAGE.\nOnly extract facts that:\n- involve two DISTINCT ENTITIES from the ENTITIES list,\n- are clearly stated or unambiguously implied in the CURRENT MESSAGE,\n    and can be represented as edges in a knowledge graph.\n- Facts should include entity names rather than pronouns whenever possible.\n\nYou may use information from the PREVIOUS MESSAGES only to disambiguate references or support continuity.\n\n\n\n\n# EXTRACTION RULES\n\n1. **Entity Name Validation**: `source_entity_name` and `target_entity_name` must use only the `name` values from the ENTITIES list provided above.\n   - **CRITICAL**: Using names not in the list will cause the edge to be rejected\n2. Each fact must involve two **distinct** entities — `source_entity_name` and `target_entity_name` NEVER refer to the same entity.\n3. Prefer facts that involve two distinct entities from the ENTITIES list. When a sentence describes a specific, concrete detail about a single entity (a brand name, a specific item, a physical description, a quantity, a location, a named activity), do NOT drop it. Instead, look for a second entity in the ENTITIES list that the detail relates to and form a proper triple (e.g., Entity -> OWNS -> item-entity, Entity -> LIVES_IN -> place-entity, Entity -> HAS_ATTRIBUTE -> detail-entity). Only skip the fact when no second entity in the ENTITIES list can anchor the detail.\n   - BAD: \"Alice feels happy\" (vague single-entity state with no concrete detail — what is Alice happy about?)\n   - GOOD: \"Alice feels happy about Bob's promotion\" → Alice -> FEELS_HAPPY_ABOUT -> Bob's promotion\n   - GOOD: \"Nate plays games on a Gamecube\" → Nate -> PLAYS_GAMES_ON -> Gamecube (when \"Gamecube\" is in ENTITIES)\n   - GOOD: \"Alice congratulated Bob\" (relationship between two entities), \"Alice lives in Paris\" (relationship between entity and place)\n4. Do not emit semantically redundant facts, even across episodes within the CURRENT_MESSAGE. However, if a later episode adds specific details to a previously stated fact (e.g., adding a brand name, a count, a color, a location, or any concrete attribute), extract the more detailed version as a NEW fact — it is NOT a duplicate. Only treat facts as duplicates when they convey the same specificity.\n   - NOT a duplicate: \"user plays video games\" (Episode 0) vs. \"user plays games on a Gamecube\" (Episode 1) → extract the second, more detailed fact.\n   - IS a duplicate: \"user plays games on a Gamecube\" (Episode 0) vs. \"user plays Gamecube games\" (Episode 1) → extract once, list both episodes in `episode_indices`.\n5. The `fact` MUST preserve all specific details from the source text: proper nouns, brand names, product names, model numbers, quantities, counts, colors, materials, physical descriptions, specific items, named locations, and named activities. Paraphrase the sentence structure but NEVER generalize:\n   - NEVER generalize \"Gamecube\" to \"gaming console\", \"Ford Mustang\" to \"car\", \"wool coat\" to \"coat\", \"red and purple lighting\" to \"lighting\", \"cracked windshield\" to \"car damage\", or \"three screenplays\" to \"several screenplays\".\n   - Do not verbatim quote the original text, but every concrete noun, number, and descriptor in the source should survive into the `fact`.\n6. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., \"last week\"). When the CURRENT_MESSAGE contains multiple episodes with per-episode timestamps, prefer the timestamp of the specific episode the fact originates from.\n7. Do **not** hallucinate or infer temporal bounds from unrelated events.\n\n# RELATION TYPE RULES\n\n- If FACT_TYPES are provided and the relationship matches one of the types (considering the entity type signature), use that fact_type_name as the `relation_type`.\n- Otherwise, derive a `relation_type` from the relationship predicate in SCREAMING_SNAKE_CASE (e.g., WORKS_AT, LIVES_IN, IS_FRIENDS_WITH).\n\n# DATETIME RULES\n\n- Use ISO 8601 with \"Z\" suffix (UTC) (e.g., 2025-04-30T00:00:00Z).\n- If the fact is ongoing (present tense), set `valid_at` to the timestamp of the episode the fact originates from. If no per-episode timestamp is available, use REFERENCE_TIME.\n- If a change/termination is expressed, set `invalid_at` to the relevant timestamp.\n- Leave both fields `null` if no explicit or resolvable time is stated.\n- If only a date is mentioned (no time), assume 00:00:00.\n- If only a year is mentioned, use January 1st at 00:00:00.\n        ",
+     "role": "user"
+    }
+   ],
+   "model_size": "medium",
+   "schema_name": "ExtractedEdges"
+  },
+  "response": {
+   "edges": [
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Harborview Robotics was founded in 2021 by Elena Vasquez",
+     "invalid_at": null,
+     "relation_type": "FOUNDED_BY",
+     "source_entity_name": "Harborview Robotics",
+     "target_entity_name": "Elena Vasquez",
+     "valid_at": "2021-01-01T00:00:00Z"
+    },
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Harborview Robotics was founded in 2021 by Rafael Costa",
+     "invalid_at": null,
+     "relation_type": "FOUNDED_BY",
+     "source_entity_name": "Harborview Robotics",
+     "target_entity_name": "Rafael Costa",
+     "valid_at": "2021-01-01T00:00:00Z"
+    },
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Elena Vasquez serves as chief executive officer of Harborview Robotics",
+     "invalid_at": null,
+     "relation_type": "CEO_OF",
+     "source_entity_name": "Elena Vasquez",
+     "target_entity_name": "Harborview Robotics",
+     "valid_at": "2026-05-20T09:00:00Z"
+    },
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Rafael Costa serves as chief technology officer of Harborview Robotics",
+     "invalid_at": null,
+     "relation_type": "CTO_OF",
+     "source_entity_name": "Rafael Costa",
+     "target_entity_name": "Harborview Robotics",
+     "valid_at": "2026-05-20T09:00:00Z"
+    },
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Harborview Robotics' flagship product is the Atlas arm",
+     "invalid_at": null,
+     "relation_type": "DEVELOPS",
+     "source_entity_name": "Harborview Robotics",
+     "target_entity_name": "Atlas arm",
+     "valid_at": "2026-05-20T09:00:00Z"
+    },
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "The Atlas arm is deployed in warehouse automation across Europe",
+     "invalid_at": null,
+     "relation_type": "DEPLOYED_FOR",
+     "source_entity_name": "Atlas arm",
+     "target_entity_name": "Harborview Robotics",
+     "valid_at": "2026-05-20T09:00:00Z"
+    }
+   ]
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[{'idx': 0, 'fact': 'Elena Vasquez is the CEO of Harborview Robotics.'}]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 1, 'fact': 'Harborview Robotics is based in Lisbon.'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nHarborview Robotics was founded in 2021 by Elena Vasquez\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeDuplicate"
+  },
+  "response": {
+   "contradicted_facts": [],
+   "duplicate_facts": [
+    0
+   ]
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 0, 'fact': 'Elena Vasquez is the CEO of Harborview Robotics.'}, {'idx': 1, 'fact': 'Harborview Robotics is based in Lisbon.'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nHarborview Robotics was founded in 2021 by Rafael Costa\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeDuplicate"
+  },
+  "response": {
+   "contradicted_facts": [],
+   "duplicate_facts": []
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 0, 'fact': 'Elena Vasquez is the CEO of Harborview Robotics.'}, {'idx': 1, 'fact': 'Harborview Robotics is based in Lisbon.'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nElena Vasquez serves as chief executive officer of Harborview Robotics\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeDuplicate"
+  },
+  "response": {
+   "contradicted_facts": [
+    0
+   ],
+   "duplicate_facts": []
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 0, 'fact': 'Elena Vasquez is the CEO of Harborview Robotics.'}, {'idx': 1, 'fact': 'Harborview Robotics is based in Lisbon.'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nRafael Costa serves as chief technology officer of Harborview Robotics\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeDuplicate"
+  },
+  "response": {
+   "contradicted_facts": [],
+   "duplicate_facts": []
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 0, 'fact': 'Elena Vasquez is the CEO of Harborview Robotics.'}, {'idx': 1, 'fact': 'Harborview Robotics is based in Lisbon.'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nHarborview Robotics' flagship product is the Atlas arm\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeDuplicate"
+  },
+  "response": {
+   "contradicted_facts": [],
+   "duplicate_facts": []
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 0, 'fact': 'Elena Vasquez is the CEO of Harborview Robotics.'}, {'idx': 1, 'fact': 'Harborview Robotics is based in Lisbon.'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nThe Atlas arm is deployed in warehouse automation across Europe\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeDuplicate"
+  },
+  "response": {
+   "contradicted_facts": [],
+   "duplicate_facts": []
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are an entity extraction specialist for JSON data. NEVER extract abstract concepts, dates, or generic field values.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER extract:\n- Date, time, or timestamp values\n- Abstract concepts or generic field values (e.g., \"true\", \"active\", \"pending\")\n- Numeric IDs or codes that are not meaningful entity names\n- Bare relational or kinship terms (e.g., \"spouse\", \"parent\", \"pet\") — only extract if qualified\n  with a possessor name\n- Bare generic objects or common nouns (e.g., \"supplies\", \"tickets\", \"gear\") — only extract if\n  qualified with a distinguishing detail\n- Generic media/content nouns unless uniquely identified in the value itself (photo, pic, picture,\n  image, video, post, story)\n- Generic event/activity nouns unless uniquely identified in the value itself (event, game, meeting,\n  class, workshop, competition)\n- Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,\n  team, office)\n- Ambiguous bare nouns whose meaning depends on surrounding text rather than the extracted value itself\n\nExtract entities from the JSON and classify each using the ENTITY TYPES above.\n\n<ENTITY TYPES>\n[{'entity_type_id': 0, 'entity_type_name': 'Entity', 'entity_type_description': 'A specific, identifiable entity that does not fit any of the other listed types. Must still be a concrete, meaningful thing — specific enough to be uniquely identifiable. GOOD: a named entity not covered by the other types. BAD: \"luck\", \"ideas\", \"tomorrow\", \"things\", \"them\", \"everybody\", \"a sense of wonder\", \"great times\". When in doubt, do not extract the entity.'}]\n</ENTITY TYPES>\n\n<SOURCE DESCRIPTION>\nevents calendar entry\n</SOURCE DESCRIPTION>\n\n<JSON>\n{\"event_type\": \"product_launch\", \"company\": \"Harborview Robotics\", \"product\": \"Atlas arm v2\", \"venue\": \"Web Summit\", \"city\": \"Lisbon\", \"presenter\": \"Rafael Costa\", \"date\": \"2026-06-11\"}\n</JSON>\n\nGuidelines:\n1. Extract the primary entity the JSON represents (e.g., a \"name\" or \"user\" field).\n2. Extract named entities referenced in other properties throughout the JSON structure.\n3. Only extract entities specific enough to be uniquely identifiable.\n4. Be explicit in naming entities — use full names when available.\n5. Use the most specific form present in the data (e.g., \"road cycling\" not \"cycling\").\n6. If a value would not be meaningful and distinguishable when read alone later, do NOT extract it.\n\n\n\n<EXAMPLE>\nJSON: {\"user\": \"Jordan Lee\", \"company\": \"Acme Corp\", \"role\": \"engineer\", \"start_date\": \"2024-01-15\", \"location\": \"Denver\", \"active\": true}\nGood extractions: \"Jordan Lee\" (Person), \"Acme Corp\" (Organization), \"Denver\" (Location)\nDo NOT extract: \"engineer\" (role, not an entity), \"2024-01-15\" (date), \"true\" (field value)\n</EXAMPLE>\n\n<EXAMPLE>\nJSON: {\"author\": \"Alex\", \"attachment_type\": \"photo\", \"event_name\": \"event\", \"agency\": \"government\"}\nGood extractions: \"Alex\" (Person)\nDo NOT extract: \"photo\" (generic media noun), \"event\" (generic event noun), \"government\" (broad institutional noun)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "medium",
+   "schema_name": "ExtractedEntities"
+  },
+  "response": {
+   "extracted_entities": [
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Harborview Robotics"
+    },
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Atlas arm v2"
+    },
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Web Summit"
+    },
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Lisbon"
+    },
+    {
+     "entity_type_id": 0,
+     "episode_indices": [
+      0
+     ],
+     "name": "Rafael Costa"
+    }
+   ]
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are an entity deduplication assistant. NEVER fabricate entity names or mark distinct entities as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\n<PREVIOUS MESSAGES>\n[]\n</PREVIOUS MESSAGES>\n\n<CURRENT MESSAGE>\n{\"event_type\": \"product_launch\", \"company\": \"Harborview Robotics\", \"product\": \"Atlas arm v2\", \"venue\": \"Web Summit\", \"city\": \"Lisbon\", \"presenter\": \"Rafael Costa\", \"date\": \"2026-06-11\"}\n</CURRENT MESSAGE>\n\n<ENTITIES>\n[{\"id\": 0, \"name\": \"Atlas arm v2\", \"entity_type\": [\"Entity\"], \"entity_type_description\": \"Default Entity Type\"}, {\"id\": 1, \"name\": \"Web Summit\", \"entity_type\": [\"Entity\"], \"entity_type_description\": \"Default Entity Type\"}]\n</ENTITIES>\n\n<EXISTING ENTITIES>\n[{\"candidate_id\": 0, \"name\": \"Atlas arm demo\", \"entity_types\": [\"Entity\"], \"summary\": \"The Atlas arm demo from Harborview Robotics was described by Leo as slick.\\nHarborview Robotics' flagship product is the \"}, {\"candidate_id\": 1, \"name\": \"Lisbon\", \"entity_types\": [\"Entity\"], \"summary\": \"Harborview Robotics is based in Lisbon.\"}, {\"candidate_id\": 2, \"name\": \"Leo\", \"entity_types\": [\"Entity\"], \"summary\": \"Leo responded that he saw the news about Harborview Robotics' Series B and commented that their Atlas arm demo was slick\"}]\n</EXISTING ENTITIES>\n\nEach of the above ENTITIES was extracted from the CURRENT MESSAGE.\nFor each entity, determine if it is a duplicate of any EXISTING ENTITY.\nEntities should only be considered duplicates if they refer to the *same real-world object or concept*.\n\nNEVER mark entities as duplicates if:\n- They are related but distinct.\n- They have similar names or purposes but refer to separate instances or concepts.\n\nTask:\nENTITIES contains 2 entities with IDs 0 through 1.\nYour response MUST include EXACTLY 2 resolutions with IDs 0 through 1. Do not skip or add IDs.\n\nFor every entity, provide:\n- `id`: integer id from ENTITIES\n- `name`: the best full name for the entity (preserve the original name unless a duplicate has a more complete name)\n- `duplicate_candidate_id`: the `candidate_id` of the EXISTING ENTITY that is the best duplicate match, or -1 if there is no duplicate\n\n<EXAMPLE>\nENTITY: \"Sam\" (Person)\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Sam\", \"entity_types\": [\"Person\"], \"summary\": \"Sam enjoys hiking and photography\"}]\nResult: duplicate_candidate_id = 0 (same person referenced in conversation)\n\nENTITY: \"NYC\"\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"New York City\", \"entity_types\": [\"Location\"]}, {\"candidate_id\": 1, \"name\": \"New York Knicks\", \"entity_types\": [\"Organization\"]}]\nResult: duplicate_candidate_id = 0 (same location, abbreviated name)\n\nENTITY: \"Java\" (programming language)\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Java\", \"entity_types\": [\"Location\"], \"summary\": \"An island in Indonesia\"}]\nResult: duplicate_candidate_id = -1 (same name but distinct real-world things)\n\nENTITY: \"Marco's car\"\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Marco's vehicle\", \"entity_types\": [\"Entity\"], \"summary\": \"Marco drives a red sedan.\"}]\nResult: duplicate_candidate_id = 0 (synonym — \"car\" and \"vehicle\" refer to the same thing, same possessor)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "medium",
+   "schema_name": "NodeResolutions"
+  },
+  "response": {
+   "entity_resolutions": [
+    {
+     "duplicate_candidate_id": 0,
+     "id": 0,
+     "name": "Atlas arm v2"
+    },
+    {
+     "duplicate_candidate_id": -1,
+     "id": 1,
+     "name": "Web Summit"
+    }
+   ]
+  }
+ },
+ {
+  "request": {
+   "max_tokens": 16384,
+   "messages": [
+    {
+     "content": "You are an expert fact extractor that extracts fact triples from text. 1. Extracted fact triples should also be extracted with relevant date information. 2. The CURRENT_MESSAGE may contain multiple episodes, each with its own timestamp. Use each episode's timestamp to resolve temporal references within that episode. REFERENCE_TIME is a fallback for when no per-episode timestamp is available.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\n<PREVIOUS_MESSAGES>\n[]\n</PREVIOUS_MESSAGES>\n\n<CURRENT_MESSAGE>\n{\"event_type\": \"product_launch\", \"company\": \"Harborview Robotics\", \"product\": \"Atlas arm v2\", \"venue\": \"Web Summit\", \"city\": \"Lisbon\", \"presenter\": \"Rafael Costa\", \"date\": \"2026-06-11\"}\n</CURRENT_MESSAGE>\n\n<ENTITIES>\n[{\"name\": \"Harborview Robotics\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Atlas arm v2\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Web Summit\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Lisbon\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Rafael Costa\", \"entity_types\": [\"Entity\"]}]\n</ENTITIES>\n\n<REFERENCE_TIME>\n2026-06-11 14:30:00+00:00  # ISO 8601 (UTC); used to resolve relative time mentions\n</REFERENCE_TIME>\n\n# TASK\nExtract all factual relationships between the given ENTITIES based on the CURRENT MESSAGE.\nOnly extract facts that:\n- involve two DISTINCT ENTITIES from the ENTITIES list,\n- are clearly stated or unambiguously implied in the CURRENT MESSAGE,\n    and can be represented as edges in a knowledge graph.\n- Facts should include entity names rather than pronouns whenever possible.\n\nYou may use information from the PREVIOUS MESSAGES only to disambiguate references or support continuity.\n\n\n\n\n# EXTRACTION RULES\n\n1. **Entity Name Validation**: `source_entity_name` and `target_entity_name` must use only the `name` values from the ENTITIES list provided above.\n   - **CRITICAL**: Using names not in the list will cause the edge to be rejected\n2. Each fact must involve two **distinct** entities — `source_entity_name` and `target_entity_name` NEVER refer to the same entity.\n3. Prefer facts that involve two distinct entities from the ENTITIES list. When a sentence describes a specific, concrete detail about a single entity (a brand name, a specific item, a physical description, a quantity, a location, a named activity), do NOT drop it. Instead, look for a second entity in the ENTITIES list that the detail relates to and form a proper triple (e.g., Entity -> OWNS -> item-entity, Entity -> LIVES_IN -> place-entity, Entity -> HAS_ATTRIBUTE -> detail-entity). Only skip the fact when no second entity in the ENTITIES list can anchor the detail.\n   - BAD: \"Alice feels happy\" (vague single-entity state with no concrete detail — what is Alice happy about?)\n   - GOOD: \"Alice feels happy about Bob's promotion\" → Alice -> FEELS_HAPPY_ABOUT -> Bob's promotion\n   - GOOD: \"Nate plays games on a Gamecube\" → Nate -> PLAYS_GAMES_ON -> Gamecube (when \"Gamecube\" is in ENTITIES)\n   - GOOD: \"Alice congratulated Bob\" (relationship between two entities), \"Alice lives in Paris\" (relationship between entity and place)\n4. Do not emit semantically redundant facts, even across episodes within the CURRENT_MESSAGE. However, if a later episode adds specific details to a previously stated fact (e.g., adding a brand name, a count, a color, a location, or any concrete attribute), extract the more detailed version as a NEW fact — it is NOT a duplicate. Only treat facts as duplicates when they convey the same specificity.\n   - NOT a duplicate: \"user plays video games\" (Episode 0) vs. \"user plays games on a Gamecube\" (Episode 1) → extract the second, more detailed fact.\n   - IS a duplicate: \"user plays games on a Gamecube\" (Episode 0) vs. \"user plays Gamecube games\" (Episode 1) → extract once, list both episodes in `episode_indices`.\n5. The `fact` MUST preserve all specific details from the source text: proper nouns, brand names, product names, model numbers, quantities, counts, colors, materials, physical descriptions, specific items, named locations, and named activities. Paraphrase the sentence structure but NEVER generalize:\n   - NEVER generalize \"Gamecube\" to \"gaming console\", \"Ford Mustang\" to \"car\", \"wool coat\" to \"coat\", \"red and purple lighting\" to \"lighting\", \"cracked windshield\" to \"car damage\", or \"three screenplays\" to \"several screenplays\".\n   - Do not verbatim quote the original text, but every concrete noun, number, and descriptor in the source should survive into the `fact`.\n6. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., \"last week\"). When the CURRENT_MESSAGE contains multiple episodes with per-episode timestamps, prefer the timestamp of the specific episode the fact originates from.\n7. Do **not** hallucinate or infer temporal bounds from unrelated events.\n\n# RELATION TYPE RULES\n\n- If FACT_TYPES are provided and the relationship matches one of the types (considering the entity type signature), use that fact_type_name as the `relation_type`.\n- Otherwise, derive a `relation_type` from the relationship predicate in SCREAMING_SNAKE_CASE (e.g., WORKS_AT, LIVES_IN, IS_FRIENDS_WITH).\n\n# DATETIME RULES\n\n- Use ISO 8601 with \"Z\" suffix (UTC) (e.g., 2025-04-30T00:00:00Z).\n- If the fact is ongoing (present tense), set `valid_at` to the timestamp of the episode the fact originates from. If no per-episode timestamp is available, use REFERENCE_TIME.\n- If a change/termination is expressed, set `invalid_at` to the relevant timestamp.\n- Leave both fields `null` if no explicit or resolvable time is stated.\n- If only a date is mentioned (no time), assume 00:00:00.\n- If only a year is mentioned, use January 1st at 00:00:00.\n        ",
+     "role": "user"
+    }
+   ],
+   "model_size": "medium",
+   "schema_name": "ExtractedEdges"
+  },
+  "response": {
+   "edges": [
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Harborview Robotics launched the product Atlas arm v2.",
+     "invalid_at": null,
+     "relation_type": "LAUNCHED",
+     "source_entity_name": "Harborview Robotics",
+     "target_entity_name": "Atlas arm v2",
+     "valid_at": "2026-06-11T00:00:00Z"
+    },
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Rafael Costa presented the product Atlas arm v2.",
+     "invalid_at": null,
+     "relation_type": "PRESENTED",
+     "source_entity_name": "Rafael Costa",
+     "target_entity_name": "Atlas arm v2",
+     "valid_at": "2026-06-11T00:00:00Z"
+    },
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Web Summit was held in Lisbon.",
+     "invalid_at": null,
+     "relation_type": "HELD_IN",
+     "source_entity_name": "Web Summit",
+     "target_entity_name": "Lisbon",
+     "valid_at": "2026-06-11T00:00:00Z"
+    },
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Harborview Robotics presented at Web Summit.",
+     "invalid_at": null,
+     "relation_type": "PRESENTED_AT",
+     "source_entity_name": "Harborview Robotics",
+     "target_entity_name": "Web Summit",
+     "valid_at": "2026-06-11T00:00:00Z"
+    }
+   ]
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[{'idx': 0, 'fact': \"Harborview Robotics' flagship product is the Atlas arm\"}]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 1, 'fact': 'Elena Vasquez is the CEO of Harborview Robotics.'}, {'idx': 2, 'fact': 'Elena Vasquez serves as chief executive officer of Harborview Robotics'}, {'idx': 3, 'fact': 'Harborview Robotics is based in Lisbon.'}, {'idx': 4, 'fact': 'Harborview Robotics was founded in 2021 by Rafael Costa'}, {'idx': 5, 'fact': 'Rafael Costa serves as chief technology officer of Harborview Robotics'}, {'idx': 6, 'fact': 'The Atlas arm is deployed in warehouse automation across Europe'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nHarborview Robotics launched the product Atlas arm v2.\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeDuplicate"
+  },
+  "response": {
+   "contradicted_facts": [
+    0
+   ],
+   "duplicate_facts": [
+    0
+   ]
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 0, 'fact': 'Elena Vasquez is the CEO of Harborview Robotics.'}, {'idx': 1, 'fact': 'Elena Vasquez serves as chief executive officer of Harborview Robotics'}, {'idx': 2, 'fact': 'Harborview Robotics is based in Lisbon.'}, {'idx': 3, 'fact': 'Harborview Robotics was founded in 2021 by Rafael Costa'}, {'idx': 4, 'fact': \"Harborview Robotics' flagship product is the Atlas arm\"}, {'idx': 5, 'fact': 'Rafael Costa serves as chief technology officer of Harborview Robotics'}, {'idx': 6, 'fact': 'The Atlas arm is deployed in warehouse automation across Europe'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nRafael Costa presented the product Atlas arm v2.\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeDuplicate"
+  },
+  "response": {
+   "contradicted_facts": [],
+   "duplicate_facts": []
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 0, 'fact': 'Elena Vasquez is the CEO of Harborview Robotics.'}, {'idx': 1, 'fact': 'Elena Vasquez serves as chief executive officer of Harborview Robotics'}, {'idx': 2, 'fact': 'Harborview Robotics is based in Lisbon.'}, {'idx': 3, 'fact': 'Harborview Robotics was founded in 2021 by Rafael Costa'}, {'idx': 4, 'fact': \"Harborview Robotics' flagship product is the Atlas arm\"}, {'idx': 5, 'fact': 'Rafael Costa serves as chief technology officer of Harborview Robotics'}, {'idx': 6, 'fact': 'The Atlas arm is deployed in warehouse automation across Europe'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nWeb Summit was held in Lisbon.\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeDuplicate"
+  },
+  "response": {
+   "contradicted_facts": [],
+   "duplicate_facts": []
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 0, 'fact': 'Elena Vasquez is the CEO of Harborview Robotics.'}, {'idx': 1, 'fact': 'Elena Vasquez serves as chief executive officer of Harborview Robotics'}, {'idx': 2, 'fact': 'Harborview Robotics is based in Lisbon.'}, {'idx': 3, 'fact': 'Harborview Robotics was founded in 2021 by Rafael Costa'}, {'idx': 4, 'fact': \"Harborview Robotics' flagship product is the Atlas arm\"}, {'idx': 5, 'fact': 'Rafael Costa serves as chief technology officer of Harborview Robotics'}, {'idx': 6, 'fact': 'The Atlas arm is deployed in warehouse automation across Europe'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nHarborview Robotics presented at Web Summit.\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeDuplicate"
+  },
+  "response": {
+   "contradicted_facts": [],
+   "duplicate_facts": []
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are an entity extraction specialist for unstructured text. NEVER extract abstract concepts, feelings, or generic words.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER extract:\n- Pronouns (you, me, he, she, they, it, them, him, her, we, us, this, that, those)\n- Abstract concepts (joy, balance, growth, resilience, passion, motivation)\n- Generic common nouns or bare object words (day, life, people, work, stuff, things, food, time,\n  tickets, supplies, clothes, keys, gear)\n- Generic media/content nouns unless uniquely identified in the node name itself (photo, pic, picture,\n  image, video, post, story)\n- Generic event/activity nouns unless uniquely identified in the node name itself (event, game, meeting,\n  class, workshop, competition)\n- Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,\n  team, office)\n- Ambiguous bare nouns whose meaning depends on sentence context rather than the node name itself\n- Sentence fragments or clauses as entity names\n- Bare relational or kinship terms (dad, mom, sister, brother, spouse, friend, boss, pet, dog,\n  cat) unless qualified with a possessor (e.g., \"Nisha's dad\" is acceptable, \"dad\" alone is not)\n- Bare generic objects that cannot be meaningfully qualified with a possessor, brand, or\n  distinguishing detail (e.g., NEVER extract \"supplies\" from \"I picked up some supplies\")\n\nExtract entities from the TEXT that are **explicitly mentioned**.\nFor each entity, classify it using the ENTITY TYPES above.\nOnly extract entities specific enough to be uniquely identifiable — ask: \"Could this have its own Wikipedia article or database entry?\"\n\n<ENTITY TYPES>\n[{'entity_type_id': 0, 'entity_type_name': 'Entity', 'entity_type_description': 'A specific, identifiable entity that does not fit any of the other listed types. Must still be a concrete, meaningful thing — specific enough to be uniquely identifiable. GOOD: a named entity not covered by the other types. BAD: \"luck\", \"ideas\", \"tomorrow\", \"things\", \"them\", \"everybody\", \"a sense of wonder\", \"great times\". When in doubt, do not extract the entity.'}]\n</ENTITY TYPES>\n\n<TEXT>\nHarborview Robotics announced today that co-founder Rafael Costa is stepping down as chief technology officer to start an independent research lab in Porto. Chief executive Elena Vasquez will oversee the engineering organization during the transition.\n</TEXT>\n\nGuidelines:\n1. Extract named entities and specific, concrete things.\n2. Do not create nodes for relationships or actions.\n3. Do not create nodes for temporal information like dates, times or years.\n4. Be explicit in node names, using full names and avoiding abbreviations.\n5. Always use the most specific form from the text (e.g., \"road cycling\" not \"cycling\",\n   \"wool coat\" not \"coat\"). Include qualifying context when it's clear from the text.\n6. When the text refers to a person's relative, pet, or associate by a bare term, qualify the\n   entity with the possessor's name (e.g., \"Dr. Osei's colleague\" not \"colleague\").\n7. If a phrase would not be meaningful and distinguishable when read alone later, do NOT extract it.\n8. When in doubt, do NOT extract.\n\n\n\n<EXAMPLE>\nText: \"Dr. Amara Osei presented her migraine study results at the AAN conference. The study tracked 340 patients using a new CGRP combination protocol.\"\nGood extractions: \"Dr. Amara Osei\" (Person), \"AAN\" (Organization), \"migraine study\" (Topic), \"CGRP combination protocol\" (Object)\nDo NOT extract: \"results\" (generic noun), \"340\" (number), \"patients\" (generic noun), \"conference\" (generic without a specific name)\n</EXAMPLE>\n\n<EXAMPLE>\nText: \"Alex shared a pic after the event and said scoring the last basket felt incredible.\"\nGood extractions: \"Alex\" (Person)\nDo NOT extract: \"pic\" (generic media noun), \"event\" (generic event noun), \"basket\" (ambiguous bare noun)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "medium",
+   "schema_name": "ExtractedEntities"
+  },
+  "response": {
+   "extracted_entities": [
+    {
+     "entity_type_id": 0,
+     "name": "Harborview Robotics"
+    },
+    {
+     "entity_type_id": 0,
+     "name": "Rafael Costa"
+    },
+    {
+     "entity_type_id": 0,
+     "name": "Porto"
+    },
+    {
+     "entity_type_id": 0,
+     "name": "Elena Vasquez"
+    }
+   ]
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are an entity deduplication assistant. NEVER fabricate entity names or mark distinct entities as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\n<PREVIOUS MESSAGES>\n[{\"content\": \"Harborview Robotics is a Lisbon-based robotics company founded in 2021 by Elena Vasquez and Rafael Costa. Vasquez serves as chief executive officer, while Costa is the chief technology officer. The company's flagship product, the Atlas arm, is deployed in warehouse automation across Europe.\", \"timestamp\": \"2026-05-20T09:00:00+00:00\"}]\n</PREVIOUS MESSAGES>\n\n<CURRENT MESSAGE>\nHarborview Robotics announced today that co-founder Rafael Costa is stepping down as chief technology officer to start an independent research lab in Porto. Chief executive Elena Vasquez will oversee the engineering organization during the transition.\n</CURRENT MESSAGE>\n\n<ENTITIES>\n[{\"id\": 0, \"name\": \"Porto\", \"entity_type\": [\"Entity\"], \"entity_type_description\": \"Default Entity Type\"}]\n</ENTITIES>\n\n<EXISTING ENTITIES>\n[{\"candidate_id\": 0, \"name\": \"Lisbon\", \"entity_types\": [\"Entity\"], \"summary\": \"Harborview Robotics is based in Lisbon.\\nWeb Summit was held in Lisbon.\"}, {\"candidate_id\": 1, \"name\": \"Web Summit\", \"entity_types\": [\"Entity\"], \"summary\": \"Web Summit was held in Lisbon.\\nHarborview Robotics presented at Web Summit.\"}, {\"candidate_id\": 2, \"name\": \"Leo\", \"entity_types\": [\"Entity\"], \"summary\": \"Leo responded that he saw the news about Harborview Robotics' Series B and commented that their Atlas arm demo was slick\"}, {\"candidate_id\": 3, \"name\": \"Rafael Costa\", \"entity_types\": [\"Entity\"], \"summary\": \"Harborview Robotics was founded in 2021 by Rafael Costa\\nRafael Costa serves as chief technology officer of Harborview Ro\"}, {\"candidate_id\": 4, \"name\": \"Dana\", \"entity_types\": [\"Entity\"], \"summary\": \"Dana asked Leo if he saw that Harborview Robotics raised a Series B and that their CEO Elena Vasquez was on a funding pa\"}, {\"candidate_id\": 5, \"name\": \"Harborview Robotics\", \"entity_types\": [\"Entity\"], \"summary\": \"Elena Vasquez is the CEO of Harborview Robotics.\\nHarborview Robotics is based in Lisbon.\\nHarborview Robotics was founded\"}, {\"candidate_id\": 6, \"name\": \"Elena Vasquez\", \"entity_types\": [\"Entity\"], \"summary\": \"Elena Vasquez is the CEO of Harborview Robotics.\\nElena Vasquez serves as chief executive officer of Harborview Robotics\"}]\n</EXISTING ENTITIES>\n\nEach of the above ENTITIES was extracted from the CURRENT MESSAGE.\nFor each entity, determine if it is a duplicate of any EXISTING ENTITY.\nEntities should only be considered duplicates if they refer to the *same real-world object or concept*.\n\nNEVER mark entities as duplicates if:\n- They are related but distinct.\n- They have similar names or purposes but refer to separate instances or concepts.\n\nTask:\nENTITIES contains 1 entities with IDs 0 through 0.\nYour response MUST include EXACTLY 1 resolutions with IDs 0 through 0. Do not skip or add IDs.\n\nFor every entity, provide:\n- `id`: integer id from ENTITIES\n- `name`: the best full name for the entity (preserve the original name unless a duplicate has a more complete name)\n- `duplicate_candidate_id`: the `candidate_id` of the EXISTING ENTITY that is the best duplicate match, or -1 if there is no duplicate\n\n<EXAMPLE>\nENTITY: \"Sam\" (Person)\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Sam\", \"entity_types\": [\"Person\"], \"summary\": \"Sam enjoys hiking and photography\"}]\nResult: duplicate_candidate_id = 0 (same person referenced in conversation)\n\nENTITY: \"NYC\"\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"New York City\", \"entity_types\": [\"Location\"]}, {\"candidate_id\": 1, \"name\": \"New York Knicks\", \"entity_types\": [\"Organization\"]}]\nResult: duplicate_candidate_id = 0 (same location, abbreviated name)\n\nENTITY: \"Java\" (programming language)\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Java\", \"entity_types\": [\"Location\"], \"summary\": \"An island in Indonesia\"}]\nResult: duplicate_candidate_id = -1 (same name but distinct real-world things)\n\nENTITY: \"Marco's car\"\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Marco's vehicle\", \"entity_types\": [\"Entity\"], \"summary\": \"Marco drives a red sedan.\"}]\nResult: duplicate_candidate_id = 0 (synonym — \"car\" and \"vehicle\" refer to the same thing, same possessor)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "medium",
+   "schema_name": "NodeResolutions"
+  },
+  "response": {
+   "entity_resolutions": [
+    {
+     "duplicate_candidate_id": -1,
+     "id": 0,
+     "name": "Porto"
+    }
+   ]
+  }
+ },
+ {
+  "request": {
+   "max_tokens": 16384,
+   "messages": [
+    {
+     "content": "You are an expert fact extractor that extracts fact triples from text. 1. Extracted fact triples should also be extracted with relevant date information. 2. The CURRENT_MESSAGE may contain multiple episodes, each with its own timestamp. Use each episode's timestamp to resolve temporal references within that episode. REFERENCE_TIME is a fallback for when no per-episode timestamp is available.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\n<PREVIOUS_MESSAGES>\n[{\"content\": \"Harborview Robotics is a Lisbon-based robotics company founded in 2021 by Elena Vasquez and Rafael Costa. Vasquez serves as chief executive officer, while Costa is the chief technology officer. The company's flagship product, the Atlas arm, is deployed in warehouse automation across Europe.\", \"timestamp\": \"2026-05-20T09:00:00+00:00\"}]\n</PREVIOUS_MESSAGES>\n\n<CURRENT_MESSAGE>\nHarborview Robotics announced today that co-founder Rafael Costa is stepping down as chief technology officer to start an independent research lab in Porto. Chief executive Elena Vasquez will oversee the engineering organization during the transition.\n</CURRENT_MESSAGE>\n\n<ENTITIES>\n[{\"name\": \"Harborview Robotics\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Rafael Costa\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Porto\", \"entity_types\": [\"Entity\"]}, {\"name\": \"Elena Vasquez\", \"entity_types\": [\"Entity\"]}]\n</ENTITIES>\n\n<REFERENCE_TIME>\n2026-07-02 08:45:00+00:00  # ISO 8601 (UTC); used to resolve relative time mentions\n</REFERENCE_TIME>\n\n# TASK\nExtract all factual relationships between the given ENTITIES based on the CURRENT MESSAGE.\nOnly extract facts that:\n- involve two DISTINCT ENTITIES from the ENTITIES list,\n- are clearly stated or unambiguously implied in the CURRENT MESSAGE,\n    and can be represented as edges in a knowledge graph.\n- Facts should include entity names rather than pronouns whenever possible.\n\nYou may use information from the PREVIOUS MESSAGES only to disambiguate references or support continuity.\n\n\n\n\n# EXTRACTION RULES\n\n1. **Entity Name Validation**: `source_entity_name` and `target_entity_name` must use only the `name` values from the ENTITIES list provided above.\n   - **CRITICAL**: Using names not in the list will cause the edge to be rejected\n2. Each fact must involve two **distinct** entities — `source_entity_name` and `target_entity_name` NEVER refer to the same entity.\n3. Prefer facts that involve two distinct entities from the ENTITIES list. When a sentence describes a specific, concrete detail about a single entity (a brand name, a specific item, a physical description, a quantity, a location, a named activity), do NOT drop it. Instead, look for a second entity in the ENTITIES list that the detail relates to and form a proper triple (e.g., Entity -> OWNS -> item-entity, Entity -> LIVES_IN -> place-entity, Entity -> HAS_ATTRIBUTE -> detail-entity). Only skip the fact when no second entity in the ENTITIES list can anchor the detail.\n   - BAD: \"Alice feels happy\" (vague single-entity state with no concrete detail — what is Alice happy about?)\n   - GOOD: \"Alice feels happy about Bob's promotion\" → Alice -> FEELS_HAPPY_ABOUT -> Bob's promotion\n   - GOOD: \"Nate plays games on a Gamecube\" → Nate -> PLAYS_GAMES_ON -> Gamecube (when \"Gamecube\" is in ENTITIES)\n   - GOOD: \"Alice congratulated Bob\" (relationship between two entities), \"Alice lives in Paris\" (relationship between entity and place)\n4. Do not emit semantically redundant facts, even across episodes within the CURRENT_MESSAGE. However, if a later episode adds specific details to a previously stated fact (e.g., adding a brand name, a count, a color, a location, or any concrete attribute), extract the more detailed version as a NEW fact — it is NOT a duplicate. Only treat facts as duplicates when they convey the same specificity.\n   - NOT a duplicate: \"user plays video games\" (Episode 0) vs. \"user plays games on a Gamecube\" (Episode 1) → extract the second, more detailed fact.\n   - IS a duplicate: \"user plays games on a Gamecube\" (Episode 0) vs. \"user plays Gamecube games\" (Episode 1) → extract once, list both episodes in `episode_indices`.\n5. The `fact` MUST preserve all specific details from the source text: proper nouns, brand names, product names, model numbers, quantities, counts, colors, materials, physical descriptions, specific items, named locations, and named activities. Paraphrase the sentence structure but NEVER generalize:\n   - NEVER generalize \"Gamecube\" to \"gaming console\", \"Ford Mustang\" to \"car\", \"wool coat\" to \"coat\", \"red and purple lighting\" to \"lighting\", \"cracked windshield\" to \"car damage\", or \"three screenplays\" to \"several screenplays\".\n   - Do not verbatim quote the original text, but every concrete noun, number, and descriptor in the source should survive into the `fact`.\n6. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., \"last week\"). When the CURRENT_MESSAGE contains multiple episodes with per-episode timestamps, prefer the timestamp of the specific episode the fact originates from.\n7. Do **not** hallucinate or infer temporal bounds from unrelated events.\n\n# RELATION TYPE RULES\n\n- If FACT_TYPES are provided and the relationship matches one of the types (considering the entity type signature), use that fact_type_name as the `relation_type`.\n- Otherwise, derive a `relation_type` from the relationship predicate in SCREAMING_SNAKE_CASE (e.g., WORKS_AT, LIVES_IN, IS_FRIENDS_WITH).\n\n# DATETIME RULES\n\n- Use ISO 8601 with \"Z\" suffix (UTC) (e.g., 2025-04-30T00:00:00Z).\n- If the fact is ongoing (present tense), set `valid_at` to the timestamp of the episode the fact originates from. If no per-episode timestamp is available, use REFERENCE_TIME.\n- If a change/termination is expressed, set `invalid_at` to the relevant timestamp.\n- Leave both fields `null` if no explicit or resolvable time is stated.\n- If only a date is mentioned (no time), assume 00:00:00.\n- If only a year is mentioned, use January 1st at 00:00:00.\n        ",
+     "role": "user"
+    }
+   ],
+   "model_size": "medium",
+   "schema_name": "ExtractedEdges"
+  },
+  "response": {
+   "edges": [
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Rafael Costa steps down as chief technology officer at Harborview Robotics to start an independent research lab in Porto",
+     "invalid_at": "2026-07-02T08:45:00Z",
+     "relation_type": "STEPS_DOWN_AS",
+     "source_entity_name": "Rafael Costa",
+     "target_entity_name": "Harborview Robotics",
+     "valid_at": null
+    },
+    {
+     "episode_indices": [
+      0
+     ],
+     "fact": "Elena Vasquez oversees the engineering organization at Harborview Robotics during the transition",
+     "invalid_at": null,
+     "relation_type": "OVERSEES",
+     "source_entity_name": "Elena Vasquez",
+     "target_entity_name": "Harborview Robotics",
+     "valid_at": "2026-07-02T08:45:00Z"
+    }
+   ]
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[{'idx': 0, 'fact': 'Rafael Costa serves as chief technology officer of Harborview Robotics'}]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 1, 'fact': 'Elena Vasquez is the CEO of Harborview Robotics.'}, {'idx': 2, 'fact': 'Elena Vasquez serves as chief executive officer of Harborview Robotics'}, {'idx': 3, 'fact': 'Harborview Robotics is based in Lisbon.'}, {'idx': 4, 'fact': 'Harborview Robotics presented at Web Summit.'}, {'idx': 5, 'fact': 'Harborview Robotics was founded in 2021 by Rafael Costa'}, {'idx': 6, 'fact': \"Harborview Robotics' flagship product is the Atlas arm\"}, {'idx': 7, 'fact': 'Rafael Costa presented the product Atlas arm v2.'}, {'idx': 8, 'fact': 'The Atlas arm is deployed in warehouse automation across Europe'}, {'idx': 9, 'fact': 'Web Summit was held in Lisbon.'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nRafael Costa steps down as chief technology officer at Harborview Robotics to start an independent research lab in Porto\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeDuplicate"
+  },
+  "response": {
+   "contradicted_facts": [
+    0
+   ],
+   "duplicate_facts": []
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[{'idx': 0, 'fact': 'Elena Vasquez serves as chief executive officer of Harborview Robotics'}]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 1, 'fact': 'Elena Vasquez is the CEO of Harborview Robotics.'}, {'idx': 2, 'fact': 'Harborview Robotics is based in Lisbon.'}, {'idx': 3, 'fact': 'Harborview Robotics presented at Web Summit.'}, {'idx': 4, 'fact': 'Harborview Robotics was founded in 2021 by Rafael Costa'}, {'idx': 5, 'fact': \"Harborview Robotics' flagship product is the Atlas arm\"}, {'idx': 6, 'fact': 'Rafael Costa presented the product Atlas arm v2.'}, {'idx': 7, 'fact': 'Rafael Costa serves as chief technology officer of Harborview Robotics'}, {'idx': 8, 'fact': 'The Atlas arm is deployed in warehouse automation across Europe'}, {'idx': 9, 'fact': 'Web Summit was held in Lisbon.'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nElena Vasquez oversees the engineering organization at Harborview Robotics during the transition\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "EdgeDuplicate"
+  },
+  "response": {
+   "contradicted_facts": [
+    0
+   ],
+   "duplicate_facts": []
+  }
+ },
+ {
+  "request": {
+   "messages": [
+    {
+     "content": "You are a helpful assistant that generates concise entity summaries from provided context.\nDo not escape unicode characters.\n",
+     "role": "system"
+    },
+    {
+     "content": "\nGiven the MESSAGES and a list of ENTITIES, generate an updated summary for each entity that needs one.\nEach summary must be under 1000 characters.\n\nGuidelines:\n        1. Output only factual content. Never explain what you're doing, why, or mention limitations or constraints.\n        2. Only use the provided messages, entity, and entity context to set attribute values.\n        3. Keep the summary information-dense and entity-specific. STATE FACTS DIRECTLY IN UNDER 1000 CHARACTERS.\n        4. Preserve all materially relevant names, roles, places, dates, counts, and temporal qualifiers that are explicitly supported.\n        5. Prefer compact factual sentences over vague thematic phrasing or meta-language.\n        6. When the durable fact is the content of what was said, state the content directly instead of narrating that it was said.\n        7. Use communication verbs only when the act of speaking, asking, sharing, presenting, announcing, or telling is itself the important fact.\n        8. Never use filler verbs like \"mentioned\", \"described\", \"stated\", \"reported\", \"noted\", \"discussed\", \"referenced\", or \"indicated\" unless the communication act itself is the fact.\n        9. Include temporal anchors when the messages provide them and they help ground the fact.\n        10. Begin with the entity name or a direct fact, not with \"A\", \"An\", \"The\", or \"This is\" unless that wording is part of the entity name.\n\n        Example summary:\n        BAD: \"The context shows John ordered pizza. Due to length constraints, other details are omitted from this summary.\"\n        GOOD: \"John ordered pepperoni pizza from Mario's at 7:30 PM and had it delivered to the office.\"\n        \n\n<MESSAGES>\n[{\"content\": \"Harborview Robotics is a Lisbon-based robotics company founded in 2021 by Elena Vasquez and Rafael Costa. Vasquez serves as chief executive officer, while Costa is the chief technology officer. The company's flagship product, the Atlas arm, is deployed in warehouse automation across Europe.\", \"timestamp\": \"2026-05-20T09:00:00+00:00\"}]\n\"Harborview Robotics announced today that co-founder Rafael Costa is stepping down as chief technology officer to start an independent research lab in Porto. Chief executive Elena Vasquez will oversee the engineering organization during the transition.\"\n</MESSAGES>\n\n<ENTITIES>\n[{\"name\": \"Porto\", \"summary\": \"\", \"entity_types\": [\"Entity\"], \"attributes\": {}}]\n</ENTITIES>\n\nFor each entity, combine relevant information from the MESSAGES with any existing summary content.\nOnly return summaries for entities that have meaningful information to summarize.\nIf an entity has no relevant information in the messages and no existing summary, you may skip it.\n",
+     "role": "user"
+    }
+   ],
+   "model_size": "small",
+   "schema_name": "SummarizedEntities"
+  },
+  "response": {
+   "summaries": [
+    {
+     "name": "Porto",
+     "summary": "Porto is the location where Rafael Costa will start an independent research lab after stepping down as chief technology officer of Harborview Robotics."
+    }
+   ]
+  }
+ }
+]

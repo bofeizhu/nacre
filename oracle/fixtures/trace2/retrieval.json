@@ -1,0 +1,197 @@
+[
+ {
+  "query": "Who founded Harborview Robotics?",
+  "results": [
+   {
+    "fact": "Harborview Robotics was founded in 2021 by Rafael Costa",
+    "invalid_at": null,
+    "uuid": "e5",
+    "valid_at": "2021-01-01T00:00:00+00:00"
+   },
+   {
+    "fact": "Harborview Robotics presented at Web Summit.",
+    "invalid_at": null,
+    "uuid": "e4",
+    "valid_at": "2026-06-11T00:00:00+00:00"
+   },
+   {
+    "fact": "Rafael Costa serves as chief technology officer of Harborview Robotics",
+    "invalid_at": null,
+    "uuid": "e8",
+    "valid_at": "2026-05-20T09:00:00+00:00"
+   },
+   {
+    "fact": "Harborview Robotics is based in Lisbon.",
+    "invalid_at": null,
+    "uuid": "e3",
+    "valid_at": null
+   },
+   {
+    "fact": "Harborview Robotics' flagship product is the Atlas arm",
+    "invalid_at": null,
+    "uuid": "e6",
+    "valid_at": "2026-05-20T09:00:00+00:00"
+   },
+   {
+    "fact": "Elena Vasquez is the CEO of Harborview Robotics.",
+    "invalid_at": null,
+    "uuid": "e0",
+    "valid_at": "2026-05-04T10:15:00+00:00"
+   },
+   {
+    "fact": "Rafael Costa steps down as chief technology officer at Harborview Robotics to start an independent research lab in Porto",
+    "invalid_at": "2026-07-02T08:45:00+00:00",
+    "uuid": "e9",
+    "valid_at": null
+   },
+   {
+    "fact": "Elena Vasquez serves as chief executive officer of Harborview Robotics",
+    "invalid_at": "2026-07-02T08:45:00+00:00",
+    "uuid": "e2",
+    "valid_at": "2026-05-20T09:00:00+00:00"
+   },
+   {
+    "fact": "Elena Vasquez oversees the engineering organization at Harborview Robotics during the transition",
+    "invalid_at": null,
+    "uuid": "e1",
+    "valid_at": "2026-07-02T08:45:00+00:00"
+   },
+   {
+    "fact": "The Atlas arm is deployed in warehouse automation across Europe",
+    "invalid_at": null,
+    "uuid": "e10",
+    "valid_at": "2026-05-20T09:00:00+00:00"
+   }
+  ]
+ },
+ {
+  "query": "What is the Atlas arm?",
+  "results": [
+   {
+    "fact": "The Atlas arm is deployed in warehouse automation across Europe",
+    "invalid_at": null,
+    "uuid": "e10",
+    "valid_at": "2026-05-20T09:00:00+00:00"
+   },
+   {
+    "fact": "Harborview Robotics' flagship product is the Atlas arm",
+    "invalid_at": null,
+    "uuid": "e6",
+    "valid_at": "2026-05-20T09:00:00+00:00"
+   },
+   {
+    "fact": "Rafael Costa presented the product Atlas arm v2.",
+    "invalid_at": null,
+    "uuid": "e7",
+    "valid_at": "2026-06-11T00:00:00+00:00"
+   },
+   {
+    "fact": "Harborview Robotics presented at Web Summit.",
+    "invalid_at": null,
+    "uuid": "e4",
+    "valid_at": "2026-06-11T00:00:00+00:00"
+   },
+   {
+    "fact": "Elena Vasquez oversees the engineering organization at Harborview Robotics during the transition",
+    "invalid_at": null,
+    "uuid": "e1",
+    "valid_at": "2026-07-02T08:45:00+00:00"
+   },
+   {
+    "fact": "Rafael Costa serves as chief technology officer of Harborview Robotics",
+    "invalid_at": null,
+    "uuid": "e8",
+    "valid_at": "2026-05-20T09:00:00+00:00"
+   },
+   {
+    "fact": "Harborview Robotics is based in Lisbon.",
+    "invalid_at": null,
+    "uuid": "e3",
+    "valid_at": null
+   },
+   {
+    "fact": "Rafael Costa steps down as chief technology officer at Harborview Robotics to start an independent research lab in Porto",
+    "invalid_at": "2026-07-02T08:45:00+00:00",
+    "uuid": "e9",
+    "valid_at": null
+   },
+   {
+    "fact": "Elena Vasquez serves as chief executive officer of Harborview Robotics",
+    "invalid_at": "2026-07-02T08:45:00+00:00",
+    "uuid": "e2",
+    "valid_at": "2026-05-20T09:00:00+00:00"
+   },
+   {
+    "fact": "Elena Vasquez is the CEO of Harborview Robotics.",
+    "invalid_at": null,
+    "uuid": "e0",
+    "valid_at": "2026-05-04T10:15:00+00:00"
+   }
+  ]
+ },
+ {
+  "query": "Who is the CTO of Harborview Robotics?",
+  "results": [
+   {
+    "fact": "Harborview Robotics was founded in 2021 by Rafael Costa",
+    "invalid_at": null,
+    "uuid": "e5",
+    "valid_at": "2021-01-01T00:00:00+00:00"
+   },
+   {
+    "fact": "Rafael Costa serves as chief technology officer of Harborview Robotics",
+    "invalid_at": null,
+    "uuid": "e8",
+    "valid_at": "2026-05-20T09:00:00+00:00"
+   },
+   {
+    "fact": "Rafael Costa steps down as chief technology officer at Harborview Robotics to start an independent research lab in Porto",
+    "invalid_at": "2026-07-02T08:45:00+00:00",
+    "uuid": "e9",
+    "valid_at": null
+   },
+   {
+    "fact": "Harborview Robotics is based in Lisbon.",
+    "invalid_at": null,
+    "uuid": "e3",
+    "valid_at": null
+   },
+   {
+    "fact": "Harborview Robotics presented at Web Summit.",
+    "invalid_at": null,
+    "uuid": "e4",
+    "valid_at": "2026-06-11T00:00:00+00:00"
+   },
+   {
+    "fact": "Elena Vasquez serves as chief executive officer of Harborview Robotics",
+    "invalid_at": "2026-07-02T08:45:00+00:00",
+    "uuid": "e2",
+    "valid_at": "2026-05-20T09:00:00+00:00"
+   },
+   {
+    "fact": "Harborview Robotics' flagship product is the Atlas arm",
+    "invalid_at": null,
+    "uuid": "e6",
+    "valid_at": "2026-05-20T09:00:00+00:00"
+   },
+   {
+    "fact": "Elena Vasquez is the CEO of Harborview Robotics.",
+    "invalid_at": null,
+    "uuid": "e0",
+    "valid_at": "2026-05-04T10:15:00+00:00"
+   },
+   {
+    "fact": "Elena Vasquez oversees the engineering organization at Harborview Robotics during the transition",
+    "invalid_at": null,
+    "uuid": "e1",
+    "valid_at": "2026-07-02T08:45:00+00:00"
+   },
+   {
+    "fact": "The Atlas arm is deployed in warehouse automation across Europe",
+    "invalid_at": null,
+    "uuid": "e10",
+    "valid_at": "2026-05-20T09:00:00+00:00"
+   }
+  ]
+ }
+]

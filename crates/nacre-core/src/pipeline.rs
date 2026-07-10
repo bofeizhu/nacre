@@ -148,29 +148,34 @@ fn group_nodes_snapshot(
 }
 
 /// The previous-episode context window for the next `add_episode` call:
-/// the last `last_n` stored episodes with `occurred_at <= reference`, in
-/// chronological order — upstream's `retrieve_episodes` (filter inclusive,
-/// ORDER BY valid_at DESC LIMIT n, reversed). Timestamps render into
-/// prompts at second precision, matching Python's `isoformat()` for the
-/// whole-second times episodes carry.
-/// Only `content` and `valid_at` of previous episodes influence prompts;
-/// `source` fields are carried for completeness.
+/// the last `last_n` stored episodes **of the given source kind** with
+/// `occurred_at <= reference`, in chronological order — upstream's
+/// `retrieve_episodes` (filter inclusive, `e.source = $source`,
+/// ORDER BY valid_at DESC LIMIT n, reversed). `add_episode` passes the
+/// CURRENT episode's source, so a text chunk only sees prior text chunks
+/// in its prompt window. Timestamps render into prompts at second
+/// precision, matching Python's `isoformat()` for the whole-second times
+/// episodes carry.
+/// Episodes written by grit < 0.2.2 carry an empty stored kind and match
+/// no filter — re-ingest or accept the empty window for those.
 // ports: graphiti_core/utils/maintenance/graph_data_operations.py::retrieve_episodes
+// (with graphiti.py::add_episode's `source=source` argument)
 pub fn retrieve_previous_episodes(
     grit: &Grit,
     group_id: &str,
+    source: crate::extract::EpisodeSource,
     reference: DateTime<Utc>,
     last_n: usize,
 ) -> Result<Vec<EpisodeInput>, PipelineError> {
     let mut episodes = grit.episodes_in_group(group_id)?; // chronological
-    episodes.retain(|e| e.occurred_at <= reference.timestamp_millis());
+    episodes.retain(|e| e.kind == source.as_str() && e.occurred_at <= reference.timestamp_millis());
     let window_start = episodes.len().saturating_sub(last_n);
     Ok(episodes[window_start..]
         .iter()
         .map(|e| EpisodeInput {
             name: String::new(),
             content: e.content.clone(),
-            source: crate::extract::EpisodeSource::Message,
+            source,
             source_description: e.source.clone(),
             group_id: group_id.to_owned(),
             valid_at: DateTime::<Utc>::from_timestamp_millis(e.occurred_at)
@@ -669,6 +674,7 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
     grit.apply(GraphOp::AddEpisode {
         id: episode_id,
         source: episode.source_description.clone(),
+        kind: episode.source.as_str().into(),
         content: episode.content.clone(),
         occurred_at,
         group_id: episode.group_id.clone(),
@@ -994,5 +1000,54 @@ mod tests {
         DateTime::parse_from_rfc3339(iso)
             .unwrap()
             .timestamp_millis()
+    }
+
+    /// The previous-episode window filters by the CURRENT episode's source
+    /// kind (upstream passes `source=source` to `retrieve_episodes`) — a
+    /// text chunk must not see prior chat turns in its prompt window.
+    #[test]
+    fn previous_episodes_filter_by_source_kind() {
+        let dir = std::env::temp_dir().join(format!("nacre-prevsrc-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("prev-source.db");
+        let _ = std::fs::remove_file(&path);
+        let grit = Grit::open(&path, Options::new("nacre-test")).unwrap();
+        for (kind, content, at) in [
+            ("message", "a chat turn", 1_000),
+            ("text", "a document chunk", 2_000),
+            ("message", "a later chat turn", 3_000),
+        ] {
+            grit.apply(GraphOp::AddEpisode {
+                id: grit.new_id(),
+                source: "test".into(),
+                kind: kind.into(),
+                content: content.into(),
+                occurred_at: at,
+                group_id: "g".into(),
+                mentions: vec![],
+            })
+            .unwrap();
+        }
+        let at = |ms: i64| DateTime::<Utc>::from_timestamp_millis(ms).unwrap();
+        let messages =
+            retrieve_previous_episodes(&grit, "g", EpisodeSource::Message, at(5_000), 10).unwrap();
+        assert_eq!(
+            messages
+                .iter()
+                .map(|e| e.content.as_str())
+                .collect::<Vec<_>>(),
+            ["a chat turn", "a later chat turn"],
+            "message window sees only message episodes, chronological"
+        );
+        assert!(messages.iter().all(|e| e.source == EpisodeSource::Message));
+        let texts =
+            retrieve_previous_episodes(&grit, "g", EpisodeSource::Text, at(5_000), 10).unwrap();
+        assert_eq!(texts.len(), 1);
+        assert_eq!(texts[0].content, "a document chunk");
+        let json =
+            retrieve_previous_episodes(&grit, "g", EpisodeSource::Json, at(5_000), 10).unwrap();
+        assert!(json.is_empty(), "no json episodes stored");
+        drop(grit);
+        let _ = std::fs::remove_file(&path);
     }
 }

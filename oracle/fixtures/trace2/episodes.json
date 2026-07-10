@@ -1,0 +1,40 @@
+{
+ "description": "Text/json episode sources — the doc-ingestion scenario. Exercises prompt routing by source (message in ep-0, text document chunks in ep-1/ep-3, a structured json event in ep-2) and cross-source dedup: Harborview Robotics, Elena Vasquez (\"Vasquez\" in the doc), Atlas arm, and Lisbon recur across all three source kinds; \"Atlas arm v2\" in ep-2 vs \"Atlas arm\" in ep-0/ep-1 needs dedup judgment; ep-3 (text) contradicts ep-1's Rafael-Costa-is-CTO fact, so invalidation must work across sources.",
+ "episodes": [
+  {
+   "content": "Dana: Did you see Harborview Robotics just raised a Series B? Their CEO Elena Vasquez was on the funding panel last week.\nLeo: Yeah — the Atlas arm demo was slick. They're based in Lisbon, right?",
+   "name": "ep-0",
+   "reference_time": "2026-05-04T10:15:00+00:00",
+   "source": "message",
+   "source_description": "chat between coworkers"
+  },
+  {
+   "content": "Harborview Robotics is a Lisbon-based robotics company founded in 2021 by Elena Vasquez and Rafael Costa. Vasquez serves as chief executive officer, while Costa is the chief technology officer. The company's flagship product, the Atlas arm, is deployed in warehouse automation across Europe.",
+   "name": "ep-1",
+   "reference_time": "2026-05-20T09:00:00+00:00",
+   "source": "text",
+   "source_description": "company profile document"
+  },
+  {
+   "content": "{\"event_type\": \"product_launch\", \"company\": \"Harborview Robotics\", \"product\": \"Atlas arm v2\", \"venue\": \"Web Summit\", \"city\": \"Lisbon\", \"presenter\": \"Rafael Costa\", \"date\": \"2026-06-11\"}",
+   "name": "ep-2",
+   "reference_time": "2026-06-11T14:30:00+00:00",
+   "source": "json",
+   "source_description": "events calendar entry"
+  },
+  {
+   "content": "Harborview Robotics announced today that co-founder Rafael Costa is stepping down as chief technology officer to start an independent research lab in Porto. Chief executive Elena Vasquez will oversee the engineering organization during the transition.",
+   "name": "ep-3",
+   "reference_time": "2026-07-02T08:45:00+00:00",
+   "source": "text",
+   "source_description": "press note"
+  }
+ ],
+ "group_id": "trace2",
+ "name": "trace2",
+ "queries": [
+  "Who founded Harborview Robotics?",
+  "What is the Atlas arm?",
+  "Who is the CTO of Harborview Robotics?"
+ ]
+}

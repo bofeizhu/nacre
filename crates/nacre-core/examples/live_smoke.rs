@@ -84,7 +84,8 @@ async fn main() {
             .unwrap()
             .with_timezone(&chrono::Utc);
         let previous =
-            retrieve_previous_episodes(&grit, GROUP, now, PREVIOUS_EPISODE_WINDOW).unwrap();
+            retrieve_previous_episodes(&grit, GROUP, ep.source, now, PREVIOUS_EPISODE_WINDOW)
+                .unwrap();
         let outcome = add_episode(
             &grit,
             &llm,

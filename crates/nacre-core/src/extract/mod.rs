@@ -25,6 +25,29 @@ pub enum EpisodeSource {
     Json,
 }
 
+impl EpisodeSource {
+    /// The upstream `EpisodeType.name` spelling — stored in grit as the
+    /// episode's `kind` and matched by the previous-episode window filter.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            EpisodeSource::Message => "message",
+            EpisodeSource::Text => "text",
+            EpisodeSource::Json => "json",
+        }
+    }
+
+    /// Inverse of [`EpisodeSource::as_str`]; `None` for unknown tags
+    /// (e.g. episodes written before grit stored kinds).
+    pub fn from_str_opt(s: &str) -> Option<Self> {
+        match s {
+            "message" => Some(EpisodeSource::Message),
+            "text" => Some(EpisodeSource::Text),
+            "json" => Some(EpisodeSource::Json),
+            _ => None,
+        }
+    }
+}
+
 /// One episode as pipeline input.
 ///
 /// Timestamps are ISO 8601 strings exactly as Python's

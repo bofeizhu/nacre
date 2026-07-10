@@ -1,0 +1,340 @@
+{
+ "edges": [
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:12:48.836600+00:00",
+   "episodes": [
+    "ep0",
+    "ep1"
+   ],
+   "expired_at": null,
+   "fact": "Elena Vasquez is the CEO of Harborview Robotics.",
+   "invalid_at": null,
+   "name": "HAS_CEO",
+   "source": "n3",
+   "target": "n2",
+   "uuid": "e0",
+   "valid_at": "2026-05-04T10:15:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:13:26.071783+00:00",
+   "episodes": [
+    "ep3"
+   ],
+   "expired_at": null,
+   "fact": "Elena Vasquez oversees the engineering organization at Harborview Robotics during the transition",
+   "invalid_at": null,
+   "name": "OVERSEES",
+   "source": "n2",
+   "target": "n3",
+   "uuid": "e1",
+   "valid_at": "2026-07-02T08:45:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:13:01.180753+00:00",
+   "episodes": [
+    "ep1"
+   ],
+   "expired_at": null,
+   "fact": "The Atlas arm is deployed in warehouse automation across Europe",
+   "invalid_at": null,
+   "name": "DEPLOYED_FOR",
+   "source": "n0",
+   "target": "n3",
+   "uuid": "e10",
+   "valid_at": "2026-05-20T09:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:13:15.962516+00:00",
+   "episodes": [
+    "ep2"
+   ],
+   "expired_at": null,
+   "fact": "Web Summit was held in Lisbon.",
+   "invalid_at": null,
+   "name": "HELD_IN",
+   "source": "n8",
+   "target": "n5",
+   "uuid": "e11",
+   "valid_at": "2026-06-11T00:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:13:01.180690+00:00",
+   "episodes": [
+    "ep1"
+   ],
+   "expired_at": "2026-07-10T16:13:29.118856+00:00",
+   "fact": "Elena Vasquez serves as chief executive officer of Harborview Robotics",
+   "invalid_at": "2026-07-02T08:45:00+00:00",
+   "name": "CEO_OF",
+   "source": "n2",
+   "target": "n3",
+   "uuid": "e2",
+   "valid_at": "2026-05-20T09:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:12:48.836670+00:00",
+   "episodes": [
+    "ep0"
+   ],
+   "expired_at": null,
+   "fact": "Harborview Robotics is based in Lisbon.",
+   "invalid_at": null,
+   "name": "BASED_IN",
+   "source": "n3",
+   "target": "n5",
+   "uuid": "e3",
+   "valid_at": null
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:13:15.962596+00:00",
+   "episodes": [
+    "ep2"
+   ],
+   "expired_at": null,
+   "fact": "Harborview Robotics presented at Web Summit.",
+   "invalid_at": null,
+   "name": "PRESENTED_AT",
+   "source": "n3",
+   "target": "n8",
+   "uuid": "e4",
+   "valid_at": "2026-06-11T00:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:13:01.180665+00:00",
+   "episodes": [
+    "ep1"
+   ],
+   "expired_at": null,
+   "fact": "Harborview Robotics was founded in 2021 by Rafael Costa",
+   "invalid_at": null,
+   "name": "FOUNDED_BY",
+   "source": "n3",
+   "target": "n7",
+   "uuid": "e5",
+   "valid_at": "2021-01-01T00:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:13:01.180732+00:00",
+   "episodes": [
+    "ep1",
+    "ep2"
+   ],
+   "expired_at": null,
+   "fact": "Harborview Robotics' flagship product is the Atlas arm",
+   "invalid_at": null,
+   "name": "DEVELOPS",
+   "source": "n3",
+   "target": "n0",
+   "uuid": "e6",
+   "valid_at": "2026-05-20T09:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:13:15.962479+00:00",
+   "episodes": [
+    "ep2"
+   ],
+   "expired_at": null,
+   "fact": "Rafael Costa presented the product Atlas arm v2.",
+   "invalid_at": null,
+   "name": "PRESENTED",
+   "source": "n7",
+   "target": "n0",
+   "uuid": "e7",
+   "valid_at": "2026-06-11T00:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:13:01.180711+00:00",
+   "episodes": [
+    "ep1"
+   ],
+   "expired_at": null,
+   "fact": "Rafael Costa serves as chief technology officer of Harborview Robotics",
+   "invalid_at": null,
+   "name": "CTO_OF",
+   "source": "n7",
+   "target": "n3",
+   "uuid": "e8",
+   "valid_at": "2026-05-20T09:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:13:26.071698+00:00",
+   "episodes": [
+    "ep3"
+   ],
+   "expired_at": "2026-07-10T16:13:27.716705+00:00",
+   "fact": "Rafael Costa steps down as chief technology officer at Harborview Robotics to start an independent research lab in Porto",
+   "invalid_at": "2026-07-02T08:45:00+00:00",
+   "name": "STEPS_DOWN_AS",
+   "source": "n7",
+   "target": "n3",
+   "uuid": "e9",
+   "valid_at": null
+  }
+ ],
+ "episodes": [
+  {
+   "content": "Dana: Did you see Harborview Robotics just raised a Series B? Their CEO Elena Vasquez was on the funding panel last week.\nLeo: Yeah — the Atlas arm demo was slick. They're based in Lisbon, right?",
+   "created_at": "2026-07-10T16:12:44.184683+00:00",
+   "entity_edges": [
+    "e0",
+    "e3"
+   ],
+   "name": "ep-0",
+   "source": "message",
+   "source_description": "chat between coworkers",
+   "uuid": "ep0",
+   "valid_at": "2026-05-04T10:15:00+00:00"
+  },
+  {
+   "content": "Harborview Robotics is a Lisbon-based robotics company founded in 2021 by Elena Vasquez and Rafael Costa. Vasquez serves as chief executive officer, while Costa is the chief technology officer. The company's flagship product, the Atlas arm, is deployed in warehouse automation across Europe.",
+   "created_at": "2026-07-10T16:12:53.791300+00:00",
+   "entity_edges": [
+    "e0",
+    "e0",
+    "e10",
+    "e2",
+    "e5",
+    "e6",
+    "e8"
+   ],
+   "name": "ep-1",
+   "source": "text",
+   "source_description": "company profile document",
+   "uuid": "ep1",
+   "valid_at": "2026-05-20T09:00:00+00:00"
+  },
+  {
+   "content": "{\"event_type\": \"product_launch\", \"company\": \"Harborview Robotics\", \"product\": \"Atlas arm v2\", \"venue\": \"Web Summit\", \"city\": \"Lisbon\", \"presenter\": \"Rafael Costa\", \"date\": \"2026-06-11\"}",
+   "created_at": "2026-07-10T16:13:09.643019+00:00",
+   "entity_edges": [
+    "e11",
+    "e4",
+    "e6",
+    "e7"
+   ],
+   "name": "ep-2",
+   "source": "json",
+   "source_description": "events calendar entry",
+   "uuid": "ep2",
+   "valid_at": "2026-06-11T14:30:00+00:00"
+  },
+  {
+   "content": "Harborview Robotics announced today that co-founder Rafael Costa is stepping down as chief technology officer to start an independent research lab in Porto. Chief executive Elena Vasquez will oversee the engineering organization during the transition.",
+   "created_at": "2026-07-10T16:13:20.978771+00:00",
+   "entity_edges": [
+    "e1",
+    "e2",
+    "e9"
+   ],
+   "name": "ep-3",
+   "source": "text",
+   "source_description": "press note",
+   "uuid": "ep3",
+   "valid_at": "2026-07-02T08:45:00+00:00"
+  }
+ ],
+ "nodes": [
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:12:46.298896+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Atlas arm demo",
+   "summary": "The Atlas arm demo from Harborview Robotics was described by Leo as slick.\nHarborview Robotics' flagship product is the Atlas arm\nThe Atlas arm is deployed in warehouse automation across Europe\nRafael Costa presented the product Atlas arm v2.",
+   "uuid": "n0"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:12:46.297517+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Dana",
+   "summary": "Dana asked Leo if he saw that Harborview Robotics raised a Series B and that their CEO Elena Vasquez was on a funding panel the previous week.",
+   "uuid": "n1"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:12:46.298878+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Elena Vasquez",
+   "summary": "Elena Vasquez is the CEO of Harborview Robotics.\nElena Vasquez serves as chief executive officer of Harborview Robotics\nElena Vasquez oversees the engineering organization at Harborview Robotics during the transition",
+   "uuid": "n2"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:12:46.298853+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Harborview Robotics",
+   "summary": "Elena Vasquez is the CEO of Harborview Robotics.\nHarborview Robotics is based in Lisbon.\nHarborview Robotics was founded in 2021 by Rafael Costa\nElena Vasquez serves as chief executive officer of Harborview Robotics\nRafael Costa serves as chief technology officer of Harborview Robotics\nHarborview Robotics' flagship product is the Atlas arm\nThe Atlas arm is deployed in warehouse automation across Europe\nHarborview Robotics presented at Web Summit.\nRafael Costa steps down as chief technology officer at Harborview Robotics to start an independent research lab in Porto\nElena Vasquez oversees the engineering organization at Harborview Robotics during the transition",
+   "uuid": "n3"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:12:46.298798+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Leo",
+   "summary": "Leo responded that he saw the news about Harborview Robotics' Series B and commented that their Atlas arm demo was slick, and asked if they are based in Lisbon.",
+   "uuid": "n4"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:12:46.298919+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Lisbon",
+   "summary": "Harborview Robotics is based in Lisbon.\nWeb Summit was held in Lisbon.",
+   "uuid": "n5"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:13:22.374205+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Porto",
+   "summary": "Porto is the location where Rafael Costa will start an independent research lab after stepping down as chief technology officer of Harborview Robotics.",
+   "uuid": "n6"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:12:55.413389+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Rafael Costa",
+   "summary": "Harborview Robotics was founded in 2021 by Rafael Costa\nRafael Costa serves as chief technology officer of Harborview Robotics\nRafael Costa presented the product Atlas arm v2.\nRafael Costa steps down as chief technology officer at Harborview Robotics to start an independent research lab in Porto",
+   "uuid": "n7"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T16:13:11.046227+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Web Summit",
+   "summary": "Web Summit was held in Lisbon.\nHarborview Robotics presented at Web Summit.",
+   "uuid": "n8"
+  }
+ ]
+}

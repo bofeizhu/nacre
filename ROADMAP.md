@@ -417,7 +417,7 @@ motivates; core changes must not alter recorded requests.
       drafts as ghosts dotted to mergedInto. Sample data committed so the
       viewer renders from a bare checkout. Verified in-browser both
       color schemes; README documents the five-call data contract.
-- [ ] Golden trace #2: text/json episode sources — the doc-ingestion bet
+- [x] Golden trace #2: text/json episode sources — the doc-ingestion bet
       for Layer 3. Curate `oracle/episodes/trace2.json` (a text document
       chunk + a json event episode alongside a message turn; 3-4 episodes,
       2-3 queries; exercises prompt routing by source and cross-source
@@ -428,6 +428,21 @@ motivates; core changes must not alter recorded requests.
       green untouched). Expect a shakeout on the text/json extraction
       prompts — fix in nacre or pin in DEVIATIONS.md, same discipline as
       trace1.
+      → done 2026-07-11, ONE capture run + replay verify (graph state
+      deterministic; retrieval rank drift = known accepted deviation).
+      Scenario: Harborview Robotics across message/text/json sources with
+      cross-source dedup and a text press-note invalidating ep-1's
+      CTO fact. The entire shakeout was ONE port gap: upstream filters the
+      previous-episode window BY THE CURRENT EPISODE'S SOURCE
+      (`add_episode` passes `source=source` to `retrieve_episodes`) —
+      invisible to all-message trace1. Fix required grit 0.2.2 schema v3:
+      `episodes.kind` source-kind column (op field, export/import,
+      migration, frozen v3 fixture — grit e4f3e33); nacre's
+      `retrieve_previous_episodes` takes the source and filters on stored
+      kind; EpisodeRow exposes `kind` to JS (viz sample regenerated). The
+      text/json extraction prompts replayed byte-exact on first try.
+      Conformance now runs one test body per fixture dir; both traces
+      green; Node tests green.
 - [ ] BLOCKED(user: npm publish decision) Package/publish story for
       `nacre-node` (name, platforms, prebuilds). Everything before this
       works from a local build.

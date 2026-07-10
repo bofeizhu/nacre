@@ -126,9 +126,14 @@ impl Memory {
         };
         let model = build_model(&llm)?;
         let embedder = build_embedder(&embedder)?;
-        let previous =
-            retrieve_previous_episodes(&self.grit, &episode.group_id, now, PREVIOUS_EPISODE_WINDOW)
-                .map_err(generic)?;
+        let previous = retrieve_previous_episodes(
+            &self.grit,
+            &episode.group_id,
+            source,
+            now,
+            PREVIOUS_EPISODE_WINDOW,
+        )
+        .map_err(generic)?;
         let outcome = add_episode(
             &self.grit,
             &model,
