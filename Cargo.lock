@@ -251,9 +251,9 @@ dependencies = [
 
 [[package]]
 name = "grit-core"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c5e8d20594359b13934d82350ebad4b1a39a40b4ba80e26c3e4c73e00bea7e2"
+checksum = "785b1acc4c04e84e0f2551fdfd1d7379ba205d7367a58721ee74b14a6d394557"
 dependencies = [
  "rusqlite",
  "serde",
