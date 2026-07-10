@@ -93,8 +93,14 @@ increment. Conventions (binding for any agent working this file):
       and omissions → new node), label promotion. Candidate gathering via
       grit's `find_merge_candidates` + MergeNodes op construction moved to
       the `pipeline.rs` task (grit requires persisted nodes).
-- [ ] `extract/edges.rs`: entity pairs → fat edges with fact sentences (ports
-      `edge_operations.py` extraction path).
+- [x] `extract/edges.rs`: entity pairs → fat edges with fact sentences (ports
+      `edge_operations.py` extraction path): edge-types context with
+      signature map + default signature, latest-episode reference time
+      rendered as Python `str(datetime)` (space separator — fidelity trap),
+      max_tokens=16384, endpoint validation (unknown names + self-edges
+      dropped), empty-fact filter, lenient `fromisoformat`/`ensure_utc`
+      timestamp parsing (chrono), raw-first-index reference_time semantics.
+      DraftEdge/NodeRef/EdgeTypeSpec types in extract/mod.rs.
 - [ ] `dedupe/edges.rs`: edge dedup judgment (ports `edge_operations.py`).
 - [ ] `invalidate/`: temporal contradiction detection → `InvalidateEdge` ops
       with event-time reasoning (ports `edge_operations.py` invalidation +

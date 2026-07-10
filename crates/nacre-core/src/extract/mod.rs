@@ -6,8 +6,10 @@
 //! typed response, and apply upstream's post-processing — no storage access
 //! here (drafts flow to the dedupe step, then leave nacre as grit ops).
 
+pub mod edges;
 pub mod nodes;
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Where an episode came from — mirrors upstream `EpisodeType`, which picks
@@ -53,6 +55,55 @@ pub struct EntityTypeSpec {
     pub name: String,
     /// Description used for classification guidance.
     pub description: String,
+}
+
+/// A reference to a resolved graph node, as edge extraction needs it:
+/// storage identity plus the name/labels shown to the model.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeRef {
+    /// Storage identity (grit node id).
+    pub id: String,
+    /// Node name (edge endpoints are validated against these).
+    pub name: String,
+    /// Labels; always includes `Entity`.
+    pub labels: Vec<String>,
+}
+
+/// A caller-defined fact/edge type: name plus the description shown to the
+/// model (upstream uses the pydantic model docstring).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EdgeTypeSpec {
+    /// Fact type name in SCREAMING_SNAKE_CASE (e.g. `WORKS_AT`).
+    pub name: String,
+    /// Description used for classification guidance.
+    pub description: String,
+}
+
+/// An extracted relationship edge before dedup/persistence. Endpoints are
+/// storage ids (post node-resolution); episode attribution is positional,
+/// like [`DraftNode`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DraftEdge {
+    /// Source node storage id.
+    pub source_id: String,
+    /// Target node storage id.
+    pub target_id: String,
+    /// Relation type (upstream `EntityEdge.name`).
+    pub name: String,
+    /// The fact sentence — grit's fat-edge payload.
+    pub fact: String,
+    /// Namespace.
+    pub group_id: String,
+    /// 0-indexed positions of the episodes this fact was derived from
+    /// (clamped; falls back to all episodes when empty).
+    pub episode_indices: Vec<usize>,
+    /// Event time the fact became true, when stated and parseable.
+    pub valid_at: Option<DateTime<Utc>>,
+    /// Event time the fact stopped being true, when stated and parseable.
+    pub invalid_at: Option<DateTime<Utc>>,
+    /// The originating episode's timestamp (ISO 8601), for later temporal
+    /// resolution — upstream `EntityEdge.reference_time`.
+    pub reference_time: Option<String>,
 }
 
 /// An extracted entity node before dedup/persistence. Identity is
