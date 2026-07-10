@@ -5,7 +5,7 @@ Prompt text is ported **verbatim** from `refs/graphiti/graphiti_core/prompts/`
 recorded here with a reason; an empty table means "no deviations yet", not
 "nobody checked".
 
-Fidelity mechanism: fixtures under `crates/nacre-core/tests/fixtures/prompts/`
+Fidelity mechanism: fixtures under `crates/nacre/tests/fixtures/prompts/`
 are rendered from the actual upstream Python by
 `oracle/promptgen/gen_prompt_fixtures.py` (manual, offline, stub-imports);
 `tests/prompt_fidelity.rs` asserts the Rust rendering is byte-identical.

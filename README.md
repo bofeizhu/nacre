@@ -33,7 +33,7 @@ stacks blur them. This one cuts them apart:
 | Layer | What | Where |
 |:-----:|------|-------|
 | 3 | agent app (Electron + napi-rs) | *next* |
-| **2** | **LLM extraction pipeline — this repo** | `nacre-core` |
+| **2** | **LLM extraction pipeline — this repo** | `nacre` |
 | 1 | embedded bi-temporal graph on SQLite | [`grit-core`](https://crates.io/crates/grit-core) |
 
 **Nacre decides; grit executes.** Nacre computes embeddings and makes every
@@ -44,7 +44,7 @@ and replayable, and `cargo test` never touches the network.
 ## What works today
 
 The full `add_episode` pipeline and hybrid search run end-to-end against
-live APIs (see [`examples/live_smoke.rs`](crates/nacre-core/examples/live_smoke.rs)):
+live APIs (see [`examples/live_smoke.rs`](crates/nacre/examples/live_smoke.rs)):
 a real conversation ingested through DeepSeek + Zhipu into a fresh grit
 file — extraction, dedup merges, a contradiction invalidated, summaries
 refreshed, vectors persisted — then natural-language queries answered with

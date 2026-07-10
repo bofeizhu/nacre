@@ -82,7 +82,7 @@ Cargo workspace:
 ```
 nacre/
   crates/
-    nacre-core/       # the pipeline ← the product
+    nacre/            # the pipeline ← the product (crates.io: `nacre`)
       src/
         model/        # LanguageModel + Embedder traits, recording/replay layer,
                       # one real client (Claude API) behind a feature flag

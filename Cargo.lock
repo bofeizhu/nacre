@@ -699,8 +699,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "nacre-core"
-version = "0.0.1"
+name = "nacre"
+version = "0.1.0"
 dependencies = [
  "blake2",
  "chrono",
@@ -719,7 +719,7 @@ version = "0.0.1"
 dependencies = [
  "chrono",
  "grit-core",
- "nacre-core",
+ "nacre",
  "napi",
  "napi-build",
  "napi-derive",

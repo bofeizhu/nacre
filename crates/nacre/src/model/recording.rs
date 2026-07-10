@@ -23,7 +23,7 @@ use super::{CompletionRequest, Embedder, EmbedderMeta, LanguageModel, ModelError
 /// # Example
 ///
 /// ```
-/// use nacre_core::model::canonical_json;
+/// use nacre::model::canonical_json;
 /// use serde_json::json;
 ///
 /// let value = json!({"b": 1, "a": {"d": [ {"z": 1, "y": 2} ]}});
@@ -114,7 +114,7 @@ impl RecordingStore {
 /// # Example
 ///
 /// ```
-/// use nacre_core::model::{
+/// use nacre::model::{
 ///     CompletionRequest, LanguageModel, Message, ModelSize, Recording, RecordingStore,
 ///     ReplayModel, Role,
 /// };

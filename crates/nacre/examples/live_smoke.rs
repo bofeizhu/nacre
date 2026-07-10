@@ -12,13 +12,13 @@
 //! `NACRE_SMOKE_ANTHROPIC_KEY` to run against Anthropic instead;
 //! `CAPTURE_EMBEDDER_API_KEY` — Zhipu embedding-3 key.
 
-use nacre_core::extract::{EpisodeInput, EpisodeSource};
-use nacre_core::model::claude::{ClaudeConfig, ClaudeModel};
-use nacre_core::model::openai_embed::{OpenAiEmbedConfig, OpenAiEmbedder};
-use nacre_core::pipeline::{
+use nacre::extract::{EpisodeInput, EpisodeSource};
+use nacre::model::claude::{ClaudeConfig, ClaudeModel};
+use nacre::model::openai_embed::{OpenAiEmbedConfig, OpenAiEmbedder};
+use nacre::pipeline::{
     AddEpisodeOptions, PREVIOUS_EPISODE_WINDOW, add_episode, retrieve_previous_episodes,
 };
-use nacre_core::search::search_edges;
+use nacre::search::search_edges;
 
 const GROUP: &str = "smoke";
 

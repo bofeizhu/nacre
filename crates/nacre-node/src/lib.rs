@@ -1,6 +1,6 @@
 //! Node.js bindings for nacre — the Layer 3 gateway.
 //!
-//! Thin `#[napi]` glue over `nacre-core` + `grit-core`; all logic lives in
+//! Thin `#[napi]` glue over `nacre` + `grit-core`; all logic lives in
 //! those crates. Built into a loadable `.node` addon by `@napi-rs/cli`
 //! (`npm run build` in this directory); plain `cargo build -p nacre-node`
 //! type-checks and compiles the cdylib without any Node toolchain.
@@ -16,11 +16,11 @@ use rows::{
     EdgeRow, EpisodeRow, NodeHistoryJs, NodeRow, SubgraphJs, edge_row, episode_row, node_row,
 };
 
-use nacre_core::extract::{EpisodeInput, EpisodeSource};
-use nacre_core::pipeline::{
+use nacre::extract::{EpisodeInput, EpisodeSource};
+use nacre::pipeline::{
     AddEpisodeOptions, PREVIOUS_EPISODE_WINDOW, add_episode, retrieve_previous_episodes,
 };
-use nacre_core::search::search_edges;
+use nacre::search::search_edges;
 
 /// The nacre-node crate version (addon load smoke-check).
 #[napi]

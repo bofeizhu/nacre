@@ -27,12 +27,12 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, TimeZone, Utc};
 use grit_core::Grit;
-use nacre_core::extract::{EpisodeInput, EpisodeSource};
-use nacre_core::model::{EmbedderMeta, RecordingStore, ReplayEmbedder, ReplayModel};
-use nacre_core::pipeline::{
+use nacre::extract::{EpisodeInput, EpisodeSource};
+use nacre::model::{EmbedderMeta, RecordingStore, ReplayEmbedder, ReplayModel};
+use nacre::pipeline::{
     AddEpisodeOptions, PREVIOUS_EPISODE_WINDOW, add_episode, retrieve_previous_episodes,
 };
-use nacre_core::search::search_edges;
+use nacre::search::search_edges;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
