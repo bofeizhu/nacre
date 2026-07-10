@@ -25,10 +25,14 @@ increment. Conventions (binding for any agent working this file):
       `ReplayEmbedder` that serve recordings and **fail loudly on a miss**,
       and a `RecordingModel` capture wrapper. Unit tests with hand-written
       recordings.
-- [ ] Port the prompt *output* models: serde structs for every response schema
+- [x] Port the prompt *output* models: serde structs for every response schema
       in `refs/graphiti/graphiti_core/prompts/models.py` and the per-prompt
       response models — field names byte-identical to the Python (that's what
-      lands in recordings/traces). Round-trip serde tests.
+      lands in recordings/traces). Round-trip serde tests. → `src/schemas.rs`:
+      all 17 response models across the six prompt modules, pydantic-matching
+      defaults (`episode_indices=[0]`, optionals as explicit nulls), and a
+      `ResponseSchema::NAME` trait carrying the Python class name into
+      `CompletionRequest::schema_name`.
 - [ ] Verbatim prompt port: `extract_nodes` family → `nacre-core/src/extract/`
       prompt module(s) with upstream-path comments + PROMPTS.md ledger rows.
 - [ ] Verbatim prompt port: `extract_edges` family.
