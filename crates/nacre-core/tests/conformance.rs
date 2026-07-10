@@ -524,10 +524,13 @@ async fn golden_trace1_conformance() {
         .collect();
     for query_spec in expected_retrieval.as_array().unwrap() {
         let query = query_spec["query"].as_str().unwrap();
-        // Exercise the search path (grit's FTS leg ANDs all tokens, so a
-        // question-form query may legitimately return nothing until
-        // embeddings are wired — rank parity is out of scope, DEVIATIONS.md).
-        let _hits = search_edges(&grit, query, &group_id, 10).unwrap();
+        // With the vector leg fused over persisted embeddings (query
+        // vectors replay from the recorded singletons), every trace query
+        // must return hits — rank parity stays out of scope (DEVIATIONS.md).
+        let hits = search_edges(&grit, &embedder, query, &group_id, 10)
+            .await
+            .unwrap();
+        assert!(!hits.is_empty(), "no hits for trace query {query:?}");
         for r in query_spec["results"].as_array().unwrap() {
             let fact = r["fact"].as_str().unwrap();
             assert!(

@@ -20,6 +20,9 @@ use chrono::{DateTime, Utc};
 use grit_core::{Budget, Grit, Query, SearchTarget};
 use serde::{Deserialize, Serialize};
 
+use crate::model::Embedder;
+use crate::pipeline::PipelineError;
+
 /// Upstream's default result limit.
 // ports: graphiti_core/helpers.py::DEFAULT_SEARCH_LIMIT
 pub const DEFAULT_SEARCH_LIMIT: usize = 10;
@@ -51,16 +54,35 @@ pub struct EdgeSearchResult {
 
 /// Hybrid edge search: the out-of-the-box `graphiti.search` equivalent.
 /// Returns at most `num_results` currently-valid edges in rank order.
+///
+/// The query is embedded so grit's RRF fuses the vector leg (over the
+/// fact embeddings the pipeline persists) with FTS — grit skips the
+/// vector leg gracefully when no embedding model is registered or the
+/// dimension mismatches.
 // ports: graphiti.py::search (EDGE_HYBRID_SEARCH_RRF path)
-pub fn search_edges(
+pub async fn search_edges<E: Embedder>(
     grit: &Grit,
+    embedder: &E,
     query: &str,
     group_id: &str,
     num_results: usize,
-) -> Result<Vec<EdgeSearchResult>, grit_core::Error> {
-    let hits = grit.search(Query::text(query).group(group_id).budget(Budget::items(
-        num_results.saturating_mul(EDGE_OVERFETCH).max(1),
-    )))?;
+) -> Result<Vec<EdgeSearchResult>, PipelineError> {
+    // ports: search/search.py — `embedder.create(input_data=[query.replace('\n', ' ')])`
+    // (verified against trace1's recorded singleton query batches)
+    let query_vector = embedder
+        .embed(std::slice::from_ref(&query.replace('\n', " ")))
+        .await?
+        .into_iter()
+        .next()
+        .unwrap_or_default();
+    let hits = grit.search(
+        Query::text(query)
+            .vector(query_vector)
+            .group(group_id)
+            .budget(Budget::items(
+                num_results.saturating_mul(EDGE_OVERFETCH).max(1),
+            )),
+    )?;
     let ms = |t: i64| DateTime::<Utc>::from_timestamp_millis(t);
     Ok(hits
         .into_iter()
@@ -84,8 +106,27 @@ pub fn search_edges(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{EmbedderMeta, ModelError};
     use grit_core::{GraphOp, Options};
     use serde_json::json;
+
+    /// Offline stub: constant vector. These tests exercise the FTS leg and
+    /// plumbing; grit skips the vector leg (no model registered).
+    struct StubEmbedder;
+
+    impl Embedder for StubEmbedder {
+        fn meta(&self) -> EmbedderMeta {
+            EmbedderMeta {
+                model_id: "stub".into(),
+                dim: 3,
+                model_version: String::new(),
+            }
+        }
+
+        async fn embed(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>, ModelError> {
+            Ok(inputs.iter().map(|_| vec![1.0, 0.0, 0.0]).collect())
+        }
+    }
 
     fn open_grit(name: &str) -> (Grit, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!("nacre-search-{}", std::process::id()));
@@ -123,8 +164,8 @@ mod tests {
         .unwrap();
     }
 
-    #[test]
-    fn returns_matching_edges_in_rank_order_and_respects_group() {
+    #[tokio::test]
+    async fn returns_matching_edges_in_rank_order_and_respects_group() {
         let (grit, path) = open_grit("search-edges.db");
         add_fact(
             &grit,
@@ -148,16 +189,27 @@ mod tests {
             "Priya visited the Northwind office in g2.",
         );
 
-        let hits = search_edges(&grit, "Northwind", "g1", 10).unwrap();
+        let hits = search_edges(&grit, &StubEmbedder, "Northwind", "g1", 10)
+            .await
+            .unwrap();
         assert_eq!(hits.len(), 1, "only g1's Northwind fact");
         assert_eq!(hits[0].fact, "Priya works at Northwind Labs.");
 
-        let all = search_edges(&grit, "Priya OR Jordan OR Northwind OR ceramics", "g1", 10);
+        let all = search_edges(
+            &grit,
+            &StubEmbedder,
+            "Priya OR Jordan OR Northwind OR ceramics",
+            "g1",
+            10,
+        )
+        .await;
         // FTS syntax may reject the raw OR string depending on tokenizer;
         // don't over-constrain — the group filter is the assertion above.
         drop(all);
 
-        let limited = search_edges(&grit, "Northwind", "g2", 0).unwrap();
+        let limited = search_edges(&grit, &StubEmbedder, "Northwind", "g2", 0)
+            .await
+            .unwrap();
         assert!(limited.is_empty(), "num_results=0 yields nothing");
 
         drop(grit);

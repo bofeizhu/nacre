@@ -251,7 +251,7 @@ fine (replay only fails on unrecorded requests nacre makes).
       existing names served from vectors persisted by earlier episodes);
       the missing-names fallback keeps the harness's sorted-unique batch
       shape for cold graphs.
-- [ ] nacre: query-embedding leg in `search/` — `search_edges` accepts an
+- [x] nacre: query-embedding leg in `search/` — `search_edges` accepts an
       embedder (or pre-computed query vector), embeds the query the way
       upstream does for `graphiti.search` (verify the exact input string
       against the recorded `{"inputs": [query]}` keys in trace1), and passes
@@ -259,6 +259,11 @@ fine (replay only fails on unrecorded requests nacre makes).
       Update the conformance retrieval sanity block to pass the
       ReplayEmbedder; a question-form query returning hits is the smoke
       signal.
+      → done 2026-07-10: verified input = `query.replace('\n', ' ')`
+      singleton; search_edges is now async with an Embedder param and
+      returns PipelineError. Conformance asserts non-empty hits for ALL
+      five trace queries — "Where does Priya work?" (previously zero hits,
+      FTS-AND only) now resolves through the fused vector leg.
 - [ ] nacre: previous-episodes helper — fetch the last-10 window
       (`RELEVANT_SCHEMA_LIMIT`, occurred_at <= reference, ascending) from
       grit via the group-scan API, mirroring upstream `retrieve_episodes`;
