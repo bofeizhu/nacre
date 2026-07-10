@@ -43,7 +43,10 @@ increment. Conventions (binding for any agent working this file):
       (manual, offline) asserted byte-identical in `tests/prompt_fidelity.rs`.
       Prompt modules live under `src/prompts/` 1:1 with upstream (not inside
       the step modules) so diffs against the pin stay mechanical.
-- [ ] Verbatim prompt port: `extract_edges` family.
+- [x] Verbatim prompt port: `extract_edges` family →
+      `src/prompts/extract_edges.rs` (edge, extract_attributes,
+      extract_timestamps, extract_timestamps_batch), 5 fixture cases including
+      the optional FACT_TYPES section.
 - [ ] Verbatim prompt port: `dedupe_nodes` + `dedupe_edges` families.
 - [ ] Verbatim prompt port: `summarize_nodes` family (skip sagas — deferred,
       see AGENTS.md open questions).

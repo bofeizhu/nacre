@@ -23,3 +23,7 @@ are rendered from the actual upstream Python by
 | `prompts/extract_nodes.py::extract_summary` | `src/prompts/extract_nodes.rs` | none | |
 | `prompts/extract_nodes.py::extract_summaries_batch` | `src/prompts/extract_nodes.rs` | none | |
 | `prompts/extract_nodes.py::extract_entity_summaries_from_episodes` (+ system prompt) | `src/prompts/extract_nodes.rs` | none | |
+| `prompts/extract_edges.py::edge` | `src/prompts/extract_edges.rs` | none | |
+| `prompts/extract_edges.py::extract_attributes` | `src/prompts/extract_edges.rs` | none | |
+| `prompts/extract_edges.py::extract_timestamps` | `src/prompts/extract_edges.rs` | none | |
+| `prompts/extract_edges.py::extract_timestamps_batch` | `src/prompts/extract_edges.rs` | none | |

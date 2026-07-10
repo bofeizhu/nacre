@@ -121,7 +121,57 @@ ENTITY_TYPE_DESCRIPTIONS = {
     'Entity': 'Default entity classification.',
 }
 
+NODES = [
+    {'id': 0, 'name': 'Jordan Lee', 'entity_types': ['Person']},
+    {'id': 1, 'name': 'Belmont Arts Center', 'entity_types': ['Entity']},
+    {'id': 2, 'name': 'Gamecube', 'entity_types': ['Entity']},
+]
+
+EDGE_TYPES = [
+    {'fact_type_id': 0, 'fact_type_name': 'WORKS_AT', 'fact_type_signature': ['Person', 'Entity'], 'fact_type_description': 'Employment relationship.'},
+]
+
+FACTS = [
+    {'fact': 'Jordan Lee enrolled in a ceramics workshop last month.', 'reference_time': '2026-07-09T12:00:00Z'},
+    {'fact': 'Jordan Lee no longer teaches on Fridays.', 'reference_time': '2026-07-10T08:00:00Z'},
+]
+
 CONTEXTS: dict[str, list[dict]] = {
+    'extract_edges': [
+        {
+            '_function': 'edge',
+            'previous_episodes': PREVIOUS_EPISODES,
+            'episode_content': EPISODE_CONTENT,
+            'nodes': NODES,
+            'reference_time': '2026-07-09T12:00:00Z',
+            'custom_extraction_instructions': '',
+        },
+        {
+            '_function': 'edge',
+            '_case': 'with_fact_types',
+            'previous_episodes': [],
+            'episode_content': EPISODE_CONTENT,
+            'nodes': NODES,
+            'reference_time': '2026-07-09T12:00:00Z',
+            'custom_extraction_instructions': 'Prefer employment facts.',
+            'edge_types': EDGE_TYPES,
+        },
+        {
+            '_function': 'extract_attributes',
+            'fact': 'Jordan Lee works at Belmont Arts Center — 陶芸の先生.',
+            'reference_time': '2026-07-09T12:00:00Z',
+            'existing_attributes': {'role': 'teacher', 'since': None},
+        },
+        {
+            '_function': 'extract_timestamps',
+            'fact': 'Jordan Lee enrolled in a ceramics workshop last month.',
+            'reference_time': '2026-07-09T12:00:00Z',
+        },
+        {
+            '_function': 'extract_timestamps_batch',
+            'facts': FACTS,
+        },
+    ],
     'extract_nodes': [
         {
             '_function': 'extract_message',

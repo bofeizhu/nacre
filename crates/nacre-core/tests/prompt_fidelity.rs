@@ -6,7 +6,7 @@
 //! reproduce every message byte-for-byte. Offline: fixtures are committed.
 
 use nacre_core::model::{Message, Role};
-use nacre_core::prompts::extract_nodes;
+use nacre_core::prompts::{extract_edges, extract_nodes};
 use serde_json::Value;
 
 fn role_str(role: Role) -> &'static str {
@@ -80,4 +80,27 @@ fn extract_nodes_prompts_match_pinned_python() {
     }
     // Every function in the family, including the optional-section variants.
     assert_eq!(seen, 11, "fixture case count");
+}
+
+#[test]
+fn extract_edges_prompts_match_pinned_python() {
+    let cases: Value = serde_json::from_str(include_str!("fixtures/prompts/extract_edges.json"))
+        .expect("fixture parses");
+
+    let mut seen = 0;
+    for case in cases.as_array().expect("fixture is an array") {
+        let function = case["function"].as_str().unwrap();
+        let case_name = case["case"].as_str().unwrap();
+        let context = &case["context"];
+        let got = match function {
+            "edge" => extract_edges::edge(context),
+            "extract_attributes" => extract_edges::extract_attributes(context),
+            "extract_timestamps" => extract_edges::extract_timestamps(context),
+            "extract_timestamps_batch" => extract_edges::extract_timestamps_batch(context),
+            other => panic!("fixture references unported function {other}"),
+        };
+        assert_case_matches(function, case_name, &got, &case["messages"]);
+        seen += 1;
+    }
+    assert_eq!(seen, 5, "fixture case count");
 }
