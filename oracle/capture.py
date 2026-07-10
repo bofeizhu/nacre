@@ -34,6 +34,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from dotenv import load_dotenv
 from graphiti_core import Graphiti
 from graphiti_core.driver.falkordb_driver import FalkorDriver
 from graphiti_core.edges import EntityEdge
@@ -53,6 +54,9 @@ from recording_clients import (
 )
 
 ORACLE = Path(__file__).resolve().parent
+
+# Keys live in oracle/.env (gitignored); shell env vars take precedence.
+load_dotenv(ORACLE / '.env')
 
 
 def build_capture_llm_client():
