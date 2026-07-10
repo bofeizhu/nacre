@@ -14,7 +14,7 @@ napi = { version = "3", default-features = false, features = ["napi8", "async", 
 napi-derive = "3"
 nacre-core = { path = "../nacre-core", features = ["claude", "openai-embed"] }
 grit-core = "0.2"
-chrono = { version = "0.4", default-features = false, features = ["std"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 serde_json = "1.0"
 
 [build-dependencies]

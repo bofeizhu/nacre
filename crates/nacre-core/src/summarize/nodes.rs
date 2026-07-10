@@ -136,8 +136,10 @@ pub struct SummarizeOptions<'a> {
     /// path).
     pub skip_fact_appending: bool,
     /// Optional per-node filter; nodes it rejects are left untouched.
+    /// `Send + Sync` so pipeline futures stay `Send` (the napi bindings
+    /// run them on a multithreaded runtime).
     #[allow(clippy::type_complexity)]
-    pub should_summarize_node: Option<&'a dyn Fn(&SummarizeNode) -> bool>,
+    pub should_summarize_node: Option<&'a (dyn Fn(&SummarizeNode) -> bool + Send + Sync)>,
 }
 
 /// Refresh summaries for `nodes` in place: fact-append shortcut for short

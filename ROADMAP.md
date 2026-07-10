@@ -345,7 +345,7 @@ motivates; core changes must not alter recorded requests.
       (`version()` loads). Note: feature unification means the default
       workspace test build now compiles nacre-core WITH claude+openai-embed
       (their offline unit tests run too — 69); tests remain zero-network.
-- [ ] Handle + write path: `Memory.open(path, deviceId)` wrapping Grit;
+- [x] Handle + write path: `Memory.open(path, deviceId)` wrapping Grit;
       `addEpisode(episode, options)` running the full pipeline with
       provider config passed from JS — `{provider: "anthropic" | "deepseek"
       | "replay", ...}` mapping to ClaudeConfig presets or a
@@ -353,6 +353,13 @@ motivates; core changes must not alter recorded requests.
       deterministic, same recordings format as the oracle). Returns the
       AddEpisodeOutcome deltas (new/merged/invalidated ids) — the UI
       animation feed.
+      → done 2026-07-10: providers dispatch through AnyModel/AnyEmbedder
+      enums (RPITIT traits aren't dyn-compatible); previous-episode
+      windows fetched internally; verified end-to-end offline — replay
+      addEpisode of trace1 ep-0 through the built addon returns the
+      expected deltas. Core change: SummarizeOptions' filter hook is now
+      Send + Sync so pipeline futures cross the FFI (type-level only;
+      conformance untouched).
 - [ ] Read path for the graph view: `nodesInGroup` / `edgesInGroup` /
       `episodesInGroup` (full rows, JSON), `traverse(seeds, {depth,
       budget, asOf, asAt})` returning the Subgraph, `nodeHistory(id)`,
