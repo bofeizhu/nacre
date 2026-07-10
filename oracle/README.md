@@ -9,7 +9,7 @@ Rust stack (nacre + grit) must reproduce.
 
 - `capture.py` — the capture CLI (see its docstring for usage)
 - `recording_clients.py` — recording/replay LLM + embedder wrappers; the
-  docstring defines THE RECORDING CONTRACT shared with the nacre crate's `model`
+  docstring defines THE RECORDING CONTRACT shared with nacre-core's `model`
   module (pre-mutation messages are the request identity)
 - `promptgen/` — renders prompt-fidelity fixtures from the pinned Python
   (offline, stock python3; feeds `tests/prompt_fidelity.rs`)

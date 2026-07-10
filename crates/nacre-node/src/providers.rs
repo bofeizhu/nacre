@@ -5,9 +5,9 @@
 //! path — the same JSON format as the oracle fixtures — making Node-side
 //! tests offline and deterministic.
 
-use nacre::model::claude::{ClaudeConfig, ClaudeModel, StructuredOutput};
-use nacre::model::openai_embed::{OpenAiEmbedConfig, OpenAiEmbedder};
-use nacre::model::{
+use nacre_core::model::claude::{ClaudeConfig, ClaudeModel, StructuredOutput};
+use nacre_core::model::openai_embed::{OpenAiEmbedConfig, OpenAiEmbedder};
+use nacre_core::model::{
     CompletionRequest, Embedder, EmbedderMeta, LanguageModel, ModelError, RecordingStore,
     ReplayEmbedder, ReplayModel,
 };

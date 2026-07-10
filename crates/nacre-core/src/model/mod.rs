@@ -165,7 +165,7 @@ pub trait Embedder: Send + Sync {
 /// # Example
 ///
 /// ```
-/// use nacre::model::decode_response;
+/// use nacre_core::model::decode_response;
 /// use serde::Deserialize;
 ///
 /// #[derive(Deserialize)]

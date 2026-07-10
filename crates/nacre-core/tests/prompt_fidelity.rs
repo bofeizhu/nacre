@@ -5,8 +5,10 @@
 //! gen_prompt_fixtures.py`. The Rust port replays the same context and must
 //! reproduce every message byte-for-byte. Offline: fixtures are committed.
 
-use nacre::model::{Message, Role};
-use nacre::prompts::{dedupe_edges, dedupe_nodes, extract_edges, extract_nodes, summarize_nodes};
+use nacre_core::model::{Message, Role};
+use nacre_core::prompts::{
+    dedupe_edges, dedupe_nodes, extract_edges, extract_nodes, summarize_nodes,
+};
 use serde_json::Value;
 
 fn role_str(role: Role) -> &'static str {

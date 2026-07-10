@@ -1,7 +1,7 @@
 # nacre-node
 
 Node.js bindings for [nacre](../../README.md) — the Layer 3 gateway.
-Thin `#[napi]` glue over `nacre` + `grit-core`; all logic lives in
+Thin `#[napi]` glue over `nacre-core` + `grit-core`; all logic lives in
 those crates.
 
 ## Build

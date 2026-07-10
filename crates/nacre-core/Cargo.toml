@@ -1,5 +1,5 @@
 [package]
-name = "nacre"
+name = "nacre-core"
 description = "LLM extraction pipeline for agent memory — Graphiti's pipeline ported to Rust on grit"
 version.workspace = true
 edition.workspace = true
