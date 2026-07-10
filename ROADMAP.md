@@ -47,7 +47,10 @@ increment. Conventions (binding for any agent working this file):
       `src/prompts/extract_edges.rs` (edge, extract_attributes,
       extract_timestamps, extract_timestamps_batch), 5 fixture cases including
       the optional FACT_TYPES section.
-- [ ] Verbatim prompt port: `dedupe_nodes` + `dedupe_edges` families.
+- [x] Verbatim prompt port: `dedupe_nodes` + `dedupe_edges` families →
+      `src/prompts/dedupe_nodes.rs` (node, nodes incl. len() arithmetic,
+      node_list) + `src/prompts/dedupe_edges.rs` (resolve_edge), 4 fixture
+      cases.
 - [ ] Verbatim prompt port: `summarize_nodes` family (skip sagas — deferred,
       see AGENTS.md open questions).
 - [ ] oracle/ harness **code** (no networked run yet): uv project pinning

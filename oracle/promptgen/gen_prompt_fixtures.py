@@ -136,7 +136,53 @@ FACTS = [
     {'fact': 'Jordan Lee no longer teaches on Fridays.', 'reference_time': '2026-07-10T08:00:00Z'},
 ]
 
+EXISTING_NODES = [
+    {'candidate_id': 0, 'name': 'Jordan Lee', 'entity_types': ['Person'], 'summary': 'Jordan Lee works at Belmont Arts Center.'},
+    {'candidate_id': 1, 'name': 'Belmont Arts Center', 'entity_types': ['Entity'], 'summary': ''},
+]
+
 CONTEXTS: dict[str, list[dict]] = {
+    'dedupe_nodes': [
+        {
+            '_function': 'node',
+            'previous_episodes': PREVIOUS_EPISODES,
+            'episode_content': EPISODE_CONTENT,
+            'extracted_node': {'name': 'Jordan', 'entity_types': ['Person'], 'summary': ''},
+            'entity_type_description': 'A human being mentioned by name.',
+            'existing_nodes': EXISTING_NODES,
+        },
+        {
+            '_function': 'nodes',
+            'previous_episodes': PREVIOUS_EPISODES,
+            'episode_content': EPISODE_CONTENT,
+            'extracted_nodes': [
+                {'id': 0, 'name': 'Jordan', 'entity_types': ['Person']},
+                {'id': 1, 'name': 'Denver', 'entity_types': ['Entity']},
+                {'id': 2, 'name': "Nisha's dad", 'entity_types': ['Person']},
+            ],
+            'existing_nodes': EXISTING_NODES,
+        },
+        {
+            '_function': 'node_list',
+            'nodes': [
+                {'uuid': 'a1', 'name': 'NYC', 'summary': 'New York City'},
+                {'uuid': 'b2', 'name': 'New York City — ニューヨーク', 'summary': 'The city of New York'},
+            ],
+        },
+    ],
+    'dedupe_edges': [
+        {
+            '_function': 'resolve_edge',
+            'existing_edges': [
+                {'idx': 0, 'fact': 'Jordan Lee works at Belmont Arts Center.'},
+                {'idx': 1, 'fact': "Jordan Lee teaches beginner ceramics on Wednesday evenings."},
+            ],
+            'edge_invalidation_candidates': [
+                {'idx': 2, 'fact': 'Jordan Lee lives in Denver.'},
+            ],
+            'new_edge': 'Jordan Lee supervises two studio assistants.',
+        },
+    ],
     'extract_edges': [
         {
             '_function': 'edge',

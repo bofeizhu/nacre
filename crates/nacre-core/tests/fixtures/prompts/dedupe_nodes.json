@@ -1,0 +1,151 @@
+[
+ {
+  "function": "node",
+  "case": "default",
+  "context": {
+   "previous_episodes": [
+    {
+     "content": "Mina: The kiln room opened last month.",
+     "timestamp": "2026-07-01T09:30:00+00:00"
+    },
+    {
+     "content": "Owen: Jordan još vodi radionicu — 陶芸クラス.",
+     "timestamp": null
+    }
+   ],
+   "episode_content": "Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.",
+   "extracted_node": {
+    "name": "Jordan",
+    "entity_types": [
+     "Person"
+    ],
+    "summary": ""
+   },
+   "entity_type_description": "A human being mentioned by name.",
+   "existing_nodes": [
+    {
+     "candidate_id": 0,
+     "name": "Jordan Lee",
+     "entity_types": [
+      "Person"
+     ],
+     "summary": "Jordan Lee works at Belmont Arts Center."
+    },
+    {
+     "candidate_id": 1,
+     "name": "Belmont Arts Center",
+     "entity_types": [
+      "Entity"
+     ],
+     "summary": ""
+    }
+   ]
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are an entity deduplication assistant. NEVER fabricate entity names or mark distinct entities as duplicates."
+   },
+   {
+    "role": "user",
+    "content": "\n<PREVIOUS MESSAGES>\n[{\"content\": \"Mina: The kiln room opened last month.\", \"timestamp\": \"2026-07-01T09:30:00+00:00\"}, {\"content\": \"Owen: Jordan još vodi radionicu — 陶芸クラス.\", \"timestamp\": null}]\n</PREVIOUS MESSAGES>\n\n<CURRENT MESSAGE>\nJordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\n</CURRENT MESSAGE>\n\n<NEW ENTITY>\n{\"name\": \"Jordan\", \"entity_types\": [\"Person\"], \"summary\": \"\"}\n</NEW ENTITY>\n\n<ENTITY TYPE DESCRIPTION>\n\"A human being mentioned by name.\"\n</ENTITY TYPE DESCRIPTION>\n\n<EXISTING ENTITIES>\n[{\"candidate_id\": 0, \"name\": \"Jordan Lee\", \"entity_types\": [\"Person\"], \"summary\": \"Jordan Lee works at Belmont Arts Center.\"}, {\"candidate_id\": 1, \"name\": \"Belmont Arts Center\", \"entity_types\": [\"Entity\"], \"summary\": \"\"}]\n</EXISTING ENTITIES>\n\nEntities should only be considered duplicates if they refer to the *same real-world object or concept*.\nSemantic Equivalence: if a descriptive label in EXISTING ENTITIES clearly refers to a named entity in context, treat them as duplicates.\n\nNEVER mark entities as duplicates if:\n- They are related but distinct.\n- They have similar names or purposes but refer to separate instances or concepts.\n\nTask:\n1. Compare the NEW ENTITY against each EXISTING ENTITY (identified by `candidate_id`).\n2. If it refers to the same real-world object or concept, return the `candidate_id` of that match.\n3. Return `duplicate_candidate_id = -1` when there is no match or you are unsure.\n\n<EXAMPLE>\nNEW ENTITY: \"Sam\" (Person)\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Sam\", \"entity_types\": [\"Person\"], \"summary\": \"Sam enjoys hiking and photography\"}]\nResult: duplicate_candidate_id = 0 (same person referenced in conversation)\n\nNEW ENTITY: \"NYC\"\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"New York City\", \"entity_types\": [\"Location\"]}, {\"candidate_id\": 1, \"name\": \"New York Knicks\", \"entity_types\": [\"Organization\"]}]\nResult: duplicate_candidate_id = 0 (same location, abbreviated name)\n\nNEW ENTITY: \"Java\" (programming language)\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Java\", \"entity_types\": [\"Location\"], \"summary\": \"An island in Indonesia\"}]\nResult: duplicate_candidate_id = -1 (same name but distinct real-world things)\n\nNEW ENTITY: \"Marco's car\"\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Marco's vehicle\", \"entity_types\": [\"Entity\"], \"summary\": \"Marco drives a red sedan.\"}]\nResult: duplicate_candidate_id = 0 (synonym — \"car\" and \"vehicle\" refer to the same thing, same possessor)\n</EXAMPLE>\n"
+   }
+  ]
+ },
+ {
+  "function": "nodes",
+  "case": "default",
+  "context": {
+   "previous_episodes": [
+    {
+     "content": "Mina: The kiln room opened last month.",
+     "timestamp": "2026-07-01T09:30:00+00:00"
+    },
+    {
+     "content": "Owen: Jordan još vodi radionicu — 陶芸クラス.",
+     "timestamp": null
+    }
+   ],
+   "episode_content": "Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.",
+   "extracted_nodes": [
+    {
+     "id": 0,
+     "name": "Jordan",
+     "entity_types": [
+      "Person"
+     ]
+    },
+    {
+     "id": 1,
+     "name": "Denver",
+     "entity_types": [
+      "Entity"
+     ]
+    },
+    {
+     "id": 2,
+     "name": "Nisha's dad",
+     "entity_types": [
+      "Person"
+     ]
+    }
+   ],
+   "existing_nodes": [
+    {
+     "candidate_id": 0,
+     "name": "Jordan Lee",
+     "entity_types": [
+      "Person"
+     ],
+     "summary": "Jordan Lee works at Belmont Arts Center."
+    },
+    {
+     "candidate_id": 1,
+     "name": "Belmont Arts Center",
+     "entity_types": [
+      "Entity"
+     ],
+     "summary": ""
+    }
+   ]
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are an entity deduplication assistant. NEVER fabricate entity names or mark distinct entities as duplicates."
+   },
+   {
+    "role": "user",
+    "content": "\n<PREVIOUS MESSAGES>\n[{\"content\": \"Mina: The kiln room opened last month.\", \"timestamp\": \"2026-07-01T09:30:00+00:00\"}, {\"content\": \"Owen: Jordan još vodi radionicu — 陶芸クラス.\", \"timestamp\": null}]\n</PREVIOUS MESSAGES>\n\n<CURRENT MESSAGE>\nJordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\n</CURRENT MESSAGE>\n\n<ENTITIES>\n[{\"id\": 0, \"name\": \"Jordan\", \"entity_types\": [\"Person\"]}, {\"id\": 1, \"name\": \"Denver\", \"entity_types\": [\"Entity\"]}, {\"id\": 2, \"name\": \"Nisha's dad\", \"entity_types\": [\"Person\"]}]\n</ENTITIES>\n\n<EXISTING ENTITIES>\n[{\"candidate_id\": 0, \"name\": \"Jordan Lee\", \"entity_types\": [\"Person\"], \"summary\": \"Jordan Lee works at Belmont Arts Center.\"}, {\"candidate_id\": 1, \"name\": \"Belmont Arts Center\", \"entity_types\": [\"Entity\"], \"summary\": \"\"}]\n</EXISTING ENTITIES>\n\nEach of the above ENTITIES was extracted from the CURRENT MESSAGE.\nFor each entity, determine if it is a duplicate of any EXISTING ENTITY.\nEntities should only be considered duplicates if they refer to the *same real-world object or concept*.\n\nNEVER mark entities as duplicates if:\n- They are related but distinct.\n- They have similar names or purposes but refer to separate instances or concepts.\n\nTask:\nENTITIES contains 3 entities with IDs 0 through 2.\nYour response MUST include EXACTLY 3 resolutions with IDs 0 through 2. Do not skip or add IDs.\n\nFor every entity, provide:\n- `id`: integer id from ENTITIES\n- `name`: the best full name for the entity (preserve the original name unless a duplicate has a more complete name)\n- `duplicate_candidate_id`: the `candidate_id` of the EXISTING ENTITY that is the best duplicate match, or -1 if there is no duplicate\n\n<EXAMPLE>\nENTITY: \"Sam\" (Person)\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Sam\", \"entity_types\": [\"Person\"], \"summary\": \"Sam enjoys hiking and photography\"}]\nResult: duplicate_candidate_id = 0 (same person referenced in conversation)\n\nENTITY: \"NYC\"\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"New York City\", \"entity_types\": [\"Location\"]}, {\"candidate_id\": 1, \"name\": \"New York Knicks\", \"entity_types\": [\"Organization\"]}]\nResult: duplicate_candidate_id = 0 (same location, abbreviated name)\n\nENTITY: \"Java\" (programming language)\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Java\", \"entity_types\": [\"Location\"], \"summary\": \"An island in Indonesia\"}]\nResult: duplicate_candidate_id = -1 (same name but distinct real-world things)\n\nENTITY: \"Marco's car\"\nEXISTING ENTITIES: [{\"candidate_id\": 0, \"name\": \"Marco's vehicle\", \"entity_types\": [\"Entity\"], \"summary\": \"Marco drives a red sedan.\"}]\nResult: duplicate_candidate_id = 0 (synonym — \"car\" and \"vehicle\" refer to the same thing, same possessor)\n</EXAMPLE>\n"
+   }
+  ]
+ },
+ {
+  "function": "node_list",
+  "case": "default",
+  "context": {
+   "nodes": [
+    {
+     "uuid": "a1",
+     "name": "NYC",
+     "summary": "New York City"
+    },
+    {
+     "uuid": "b2",
+     "name": "New York City — ニューヨーク",
+     "summary": "The city of New York"
+    }
+   ]
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are an entity deduplication assistant that groups duplicate nodes by UUID."
+   },
+   {
+    "role": "user",
+    "content": "\nGiven the following context, deduplicate a list of nodes:\n\n<NODES>\n[{\"uuid\": \"a1\", \"name\": \"NYC\", \"summary\": \"New York City\"}, {\"uuid\": \"b2\", \"name\": \"New York City — ニューヨーク\", \"summary\": \"The city of New York\"}]\n</NODES>\n\nTask:\n1. Group nodes together such that all duplicate nodes are in the same list of uuids.\n2. All duplicate uuids should be grouped together in the same list.\n3. Also return a new summary that synthesizes the summaries into a new short summary.\n\nGuidelines:\n1. Each uuid from the list of nodes should appear EXACTLY once in your response.\n2. If a node has no duplicates, it should appear in the response in a list of only one uuid.\n\n<EXAMPLE>\nInput nodes:\n[\n  {\"uuid\": \"a1\", \"name\": \"NYC\", \"summary\": \"New York City\"},\n  {\"uuid\": \"b2\", \"name\": \"New York City\", \"summary\": \"The city of New York\"},\n  {\"uuid\": \"c3\", \"name\": \"Los Angeles\", \"summary\": \"City in California\"}\n]\n\nResult:\n[\n  {\"uuids\": [\"a1\", \"b2\"], \"summary\": \"New York City, also known as NYC\"},\n  {\"uuids\": [\"c3\"], \"summary\": \"City in California\"}\n]\n</EXAMPLE>\n"
+   }
+  ]
+ }
+]

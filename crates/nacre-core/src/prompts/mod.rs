@@ -13,6 +13,8 @@
 //! ([`py::py_interp`]: `str()` semantics, `repr` for containers) and
 //! [`helpers::to_prompt_json`] (`json.dumps` with default separators).
 
+pub mod dedupe_edges;
+pub mod dedupe_nodes;
 pub mod extract_edges;
 pub mod extract_nodes;
 pub mod helpers;

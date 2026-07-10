@@ -27,3 +27,7 @@ are rendered from the actual upstream Python by
 | `prompts/extract_edges.py::extract_attributes` | `src/prompts/extract_edges.rs` | none | |
 | `prompts/extract_edges.py::extract_timestamps` | `src/prompts/extract_edges.rs` | none | |
 | `prompts/extract_edges.py::extract_timestamps_batch` | `src/prompts/extract_edges.rs` | none | |
+| `prompts/dedupe_nodes.py::node` | `src/prompts/dedupe_nodes.rs` | none | |
+| `prompts/dedupe_nodes.py::nodes` | `src/prompts/dedupe_nodes.rs` | none | |
+| `prompts/dedupe_nodes.py::node_list` | `src/prompts/dedupe_nodes.rs` | none | |
+| `prompts/dedupe_edges.py::resolve_edge` | `src/prompts/dedupe_edges.rs` | none | |

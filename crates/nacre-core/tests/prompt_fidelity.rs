@@ -6,7 +6,7 @@
 //! reproduce every message byte-for-byte. Offline: fixtures are committed.
 
 use nacre_core::model::{Message, Role};
-use nacre_core::prompts::{extract_edges, extract_nodes};
+use nacre_core::prompts::{dedupe_edges, dedupe_nodes, extract_edges, extract_nodes};
 use serde_json::Value;
 
 fn role_str(role: Role) -> &'static str {
@@ -103,4 +103,36 @@ fn extract_edges_prompts_match_pinned_python() {
         seen += 1;
     }
     assert_eq!(seen, 5, "fixture case count");
+}
+
+#[test]
+fn dedupe_prompts_match_pinned_python() {
+    let node_cases: Value =
+        serde_json::from_str(include_str!("fixtures/prompts/dedupe_nodes.json"))
+            .expect("fixture parses");
+    let edge_cases: Value =
+        serde_json::from_str(include_str!("fixtures/prompts/dedupe_edges.json"))
+            .expect("fixture parses");
+
+    let mut seen = 0;
+    for case in node_cases
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(edge_cases.as_array().unwrap())
+    {
+        let function = case["function"].as_str().unwrap();
+        let case_name = case["case"].as_str().unwrap();
+        let context = &case["context"];
+        let got = match function {
+            "node" => dedupe_nodes::node(context),
+            "nodes" => dedupe_nodes::nodes(context),
+            "node_list" => dedupe_nodes::node_list(context),
+            "resolve_edge" => dedupe_edges::resolve_edge(context),
+            other => panic!("fixture references unported function {other}"),
+        };
+        assert_case_matches(function, case_name, &got, &case["messages"]);
+        seen += 1;
+    }
+    assert_eq!(seen, 4, "fixture case count");
 }

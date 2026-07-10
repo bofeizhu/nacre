@@ -1,0 +1,35 @@
+[
+ {
+  "function": "resolve_edge",
+  "case": "default",
+  "context": {
+   "existing_edges": [
+    {
+     "idx": 0,
+     "fact": "Jordan Lee works at Belmont Arts Center."
+    },
+    {
+     "idx": 1,
+     "fact": "Jordan Lee teaches beginner ceramics on Wednesday evenings."
+    }
+   ],
+   "edge_invalidation_candidates": [
+    {
+     "idx": 2,
+     "fact": "Jordan Lee lives in Denver."
+    }
+   ],
+   "new_edge": "Jordan Lee supervises two studio assistants."
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates."
+   },
+   {
+    "role": "user",
+    "content": "\nNEVER mark facts as duplicates if they have key differences, particularly around numeric values, dates, or key qualifiers.\n\nIMPORTANT constraints:\n- duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)\n- contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)\n- The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)\n\n<EXISTING FACTS>\n[{'idx': 0, 'fact': 'Jordan Lee works at Belmont Arts Center.'}, {'idx': 1, 'fact': 'Jordan Lee teaches beginner ceramics on Wednesday evenings.'}]\n</EXISTING FACTS>\n\n<FACT INVALIDATION CANDIDATES>\n[{'idx': 2, 'fact': 'Jordan Lee lives in Denver.'}]\n</FACT INVALIDATION CANDIDATES>\n\n<NEW FACT>\nJordan Lee supervises two studio assistants.\n</NEW FACT>\n\nYou will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.\nEXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.\n\n1. DUPLICATE DETECTION:\n   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.\n   - If no duplicates, return an empty list for duplicate_facts.\n\n2. CONTRADICTION DETECTION:\n   - Determine which facts the NEW FACT contradicts from either list.\n   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).\n   - Return all contradicted idx values in contradicted_facts.\n   - If no contradictions, return an empty list for contradicted_facts.\n\n<EXAMPLE>\nEXISTING FACT: idx=0, \"Alice joined Acme Corp in 2020\"\nNEW FACT: \"Alice joined Acme Corp in 2020\"\nResult: duplicate_facts=[0], contradicted_facts=[] (identical factual information)\n\nEXISTING FACT: idx=1, \"Alice works at Acme Corp as a software engineer\"\nNEW FACT: \"Alice works at Acme Corp as a senior engineer\"\nResult: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)\n\nEXISTING FACT: idx=2, \"Bob ran 5 miles on Tuesday\"\nNEW FACT: \"Bob ran 3 miles on Wednesday\"\nResult: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)\n</EXAMPLE>\n"
+   }
+  ]
+ }
+]
