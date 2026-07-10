@@ -443,12 +443,13 @@ motivates; core changes must not alter recorded requests.
       text/json extraction prompts replayed byte-exact on first try.
       Conformance now runs one test body per fixture dir; both traces
       green; Node tests green.
-- [ ] BLOCKED(user: cargo publish approval) Release grit 0.2.2 —
-      `Query::targets` (search-kind filter) + `episodes.kind` (schema v3),
-      both committed in ../grit (e4f3e33) — then tag + push grit, drop
-      nacre's uncommitted patch override, regenerate Cargo.lock against the
-      registry, full gates both repos, push both. Until then nacre main
-      builds ONLY with the local patch override (do not push nacre).
+- [x] Release grit 0.2.2 — `Query::targets` (search-kind filter) +
+      `episodes.kind` (schema v3), then tag + push grit, drop nacre's
+      uncommitted patch override, regenerate Cargo.lock against the
+      registry, full gates both repos, push both.
+      → done 2026-07-11 (user-approved publish): grit-core + grit-compat
+      0.2.2 on crates.io, grit tagged v0.2.2 and pushed (e4f3e33); nacre
+      locked to the registry checksum, full gate + Node tests green.
 - [ ] BLOCKED(user: npm publish decision) Package/publish story for
       `nacre-node` (name, platforms, prebuilds). Everything before this
       works from a local build.
