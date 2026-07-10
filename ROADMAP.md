@@ -264,11 +264,15 @@ fine (replay only fails on unrecorded requests nacre makes).
       returns PipelineError. Conformance asserts non-empty hits for ALL
       five trace queries — "Where does Priya work?" (previously zero hits,
       FTS-AND only) now resolves through the fused vector leg.
-- [ ] nacre: previous-episodes helper — fetch the last-10 window
+- [x] nacre: previous-episodes helper — fetch the last-10 window
       (`RELEVANT_SCHEMA_LIMIT`, occurred_at <= reference, ascending) from
       grit via the group-scan API, mirroring upstream `retrieve_episodes`;
       switch the conformance test's hand-threaded window to it (staying
       green proves the helper reproduces the recorded prompt windows).
+      → done 2026-07-10: `pipeline::retrieve_previous_episodes` +
+      `PREVIOUS_EPISODE_WINDOW` (=10); inclusive <= reference, chronological;
+      timestamps re-render at second precision matching Python isoformat.
+      Conformance now sources its windows from grit itself — green.
 - [ ] nacre: real embedder client behind an `openai-embed` feature flag
       (reqwest, OpenAI-compatible `/embeddings`, configurable base URL +
       model + dim truncation — Zhipu embedding-3 is the first target; never

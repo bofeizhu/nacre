@@ -42,6 +42,12 @@ const NODE_DEDUP_CANDIDATE_LIMIT: usize = 15;
 // ports: node_operations.py::NODE_DEDUP_COSINE_MIN_SCORE
 const NODE_DEDUP_MIN_SCORE: f64 = 0.6;
 
+/// Previous-episode window size: upstream's add_episode fetches this many
+/// prior episodes as extraction context (NOT the 3-episode
+/// EPISODE_WINDOW_LEN default — verified against trace1's recorded prompts).
+// ports: graphiti.py::add_episode (retrieve_episodes last_n=RELEVANT_SCHEMA_LIMIT)
+pub const PREVIOUS_EPISODE_WINDOW: usize = 10;
+
 /// Pipeline errors: model-side or storage-side.
 #[derive(Debug, thiserror::Error)]
 pub enum PipelineError {
@@ -138,6 +144,38 @@ fn group_nodes_snapshot(
         .nodes_in_group(group_id)?
         .into_iter()
         .filter(|node| node.expired_at.is_none())
+        .collect())
+}
+
+/// The previous-episode context window for the next `add_episode` call:
+/// the last `last_n` stored episodes with `occurred_at <= reference`, in
+/// chronological order — upstream's `retrieve_episodes` (filter inclusive,
+/// ORDER BY valid_at DESC LIMIT n, reversed). Timestamps render into
+/// prompts at second precision, matching Python's `isoformat()` for the
+/// whole-second times episodes carry.
+/// Only `content` and `valid_at` of previous episodes influence prompts;
+/// `source` fields are carried for completeness.
+// ports: graphiti_core/utils/maintenance/graph_data_operations.py::retrieve_episodes
+pub fn retrieve_previous_episodes(
+    grit: &Grit,
+    group_id: &str,
+    reference: DateTime<Utc>,
+    last_n: usize,
+) -> Result<Vec<EpisodeInput>, PipelineError> {
+    let mut episodes = grit.episodes_in_group(group_id)?; // chronological
+    episodes.retain(|e| e.occurred_at <= reference.timestamp_millis());
+    let window_start = episodes.len().saturating_sub(last_n);
+    Ok(episodes[window_start..]
+        .iter()
+        .map(|e| EpisodeInput {
+            name: String::new(),
+            content: e.content.clone(),
+            source: crate::extract::EpisodeSource::Message,
+            source_description: e.source.clone(),
+            group_id: group_id.to_owned(),
+            valid_at: DateTime::<Utc>::from_timestamp_millis(e.occurred_at)
+                .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, false)),
+        })
         .collect())
 }
 

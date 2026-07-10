@@ -29,17 +29,12 @@ use chrono::{DateTime, TimeZone, Utc};
 use grit_core::Grit;
 use nacre_core::extract::{EpisodeInput, EpisodeSource};
 use nacre_core::model::{EmbedderMeta, RecordingStore, ReplayEmbedder, ReplayModel};
-use nacre_core::pipeline::{AddEpisodeOptions, add_episode};
+use nacre_core::pipeline::{
+    AddEpisodeOptions, PREVIOUS_EPISODE_WINDOW, add_episode, retrieve_previous_episodes,
+};
 use nacre_core::search::search_edges;
 use serde_json::{Value, json};
 use uuid::Uuid;
-
-/// Upstream fetches this many previous episodes as extraction context —
-/// add_episode passes `last_n=RELEVANT_SCHEMA_LIMIT`, NOT the 3-episode
-/// `EPISODE_WINDOW_LEN` default (verified against trace1's recorded
-/// prompts: ep-4's window carries all four prior episodes).
-// ports: graphiti_core/graphiti.py::add_episode (retrieve_episodes call)
-const EPISODE_WINDOW_LEN: usize = 10;
 
 fn oracle_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../oracle")
@@ -439,18 +434,19 @@ async fn golden_trace1_conformance() {
     let _ = std::fs::remove_file(&path);
     let grit = Grit::open(&path, grit_core::Options::new("nacre-conformance")).unwrap();
 
-    let mut episodes: Vec<EpisodeInput> = Vec::new();
     for episode_spec in spec["episodes"].as_array().unwrap() {
         let mut episode = trace_episode(episode_spec);
         episode.group_id = group_id.clone();
-        let window_start = episodes.len().saturating_sub(EPISODE_WINDOW_LEN);
-        let previous = episodes[window_start..].to_vec();
         let now = episode
             .valid_at
             .as_deref()
             .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
             .map(|t| t.with_timezone(&Utc))
             .unwrap_or_else(|| Utc.with_ymd_and_hms(2026, 7, 10, 0, 0, 0).unwrap());
+        // The context window comes from grit itself — staying green proves
+        // the helper reproduces the recorded prompt windows byte-for-byte.
+        let previous =
+            retrieve_previous_episodes(&grit, &group_id, now, PREVIOUS_EPISODE_WINDOW).unwrap();
         add_episode(
             &grit,
             &model,
@@ -462,7 +458,6 @@ async fn golden_trace1_conformance() {
         )
         .await
         .unwrap_or_else(|e| panic!("add_episode({}) failed: {e}", episode.name));
-        episodes.push(episode);
     }
 
     let episode_meta: HashMap<String, (String, String)> = spec["episodes"]
