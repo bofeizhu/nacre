@@ -468,4 +468,12 @@ Electron app demonstrates the need, or on user say-so):
       (Trace #2 — text/json sources — was promoted into Milestone 5.)
 - Search cross-encoder reranking evaluation.
 - Communities-equivalent topic rollups, designed natively (not a port).
-- crates.io publish of nacre-core.
+- [x] crates.io publish of nacre-core — done 2026-07-11 (user-approved):
+      `nacre-core` 0.1.0. A rename to the bare `nacre` name was attempted
+      and reverted: crates.io's API policy-blocks anonymous requests and
+      the availability check misread the block as "free" — the name was
+      reserved 2026-07-07 by an unrelated CAD-kernel project (checks need
+      a descriptive User-Agent; "does not exist" is the only real "free").
+      `nacre-core` matches the grit-core convention. Packaged crate
+      verifies standalone (conformance skips loudly without oracle/;
+      prompt-fidelity fixtures ship in-crate).
