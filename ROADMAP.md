@@ -84,9 +84,15 @@ increment. Conventions (binding for any agent working this file):
       types (EpisodeInput with ISO-string timestamps for prompt fidelity;
       DraftNode with positional identity — grit assigns durable ids at
       apply time). Replay tests w/ synthetic recordings.
-- [ ] `dedupe/nodes.rs`: candidate resolution using grit's
-      `find_merge_candidates` + LLM judgment → `MergeNodes` ops (ports
-      `dedup_helpers.py` + `node_operations.py` dedup path).
+- [x] `dedupe/nodes.rs`: candidate resolution → per-draft outcomes (ports
+      `dedup_helpers.py` + `node_operations.py` dedup path): deterministic
+      pass (exact normalized match with ambiguity escalation, entropy gate,
+      MinHash/LSH fuzzy with blake2b hashing bit-identical to Python —
+      pinned test vector), then one batched LLM escalation with upstream's
+      guardrails (out-of-range/duplicate ids ignored, invalid candidate ids
+      and omissions → new node), label promotion. Candidate gathering via
+      grit's `find_merge_candidates` + MergeNodes op construction moved to
+      the `pipeline.rs` task (grit requires persisted nodes).
 - [ ] `extract/edges.rs`: entity pairs → fat edges with fact sentences (ports
       `edge_operations.py` extraction path).
 - [ ] `dedupe/edges.rs`: edge dedup judgment (ports `edge_operations.py`).

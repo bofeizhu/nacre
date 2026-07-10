@@ -28,14 +28,7 @@ when that episode occurred. For each extracted entity, set `episode_indices` \
 to the 0-based list of episode numbers where that entity is mentioned. \
 An entity appearing in Episodes 0 and 2 should have `episode_indices: [0, 2]`.";
 
-/// Lowercase and collapse whitespace so equal names map to the same key.
-// ports: dedup_helpers.py::_normalize_string_exact
-pub fn normalize_string_exact(name: &str) -> String {
-    name.to_lowercase()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
+pub use crate::dedupe::helpers::normalize_string_exact;
 
 /// Concatenate episode contents with enumerated headers. A single episode
 /// passes through as-is; multiple episodes get `[Episode N]` headers so the
