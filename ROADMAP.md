@@ -334,13 +334,17 @@ crates.io), and any new pipeline features — bindings wrap what exists.
 Conformance stays the regression net for any core change a binding
 motivates; core changes must not alter recorded requests.
 
-- [ ] `nacre-node` workspace crate (napi-rs, cdylib): scaffolding that
+- [x] `nacre-node` workspace crate (napi-rs, cdylib): scaffolding that
       `cargo build -p nacre-node` compiles and `npm run build` (via
       @napi-rs/cli, dev-dependency inside the crate dir) packages into a
       loadable `.node` addon with generated `.d.ts`. Workspace `cargo test`
       must stay green without any Node toolchain installed (the crate's
       own tests are Rust-side only). Document the build in the crate
       README.
+      → done 2026-07-10: napi 3 / napi-build 2, Node v24 verified
+      (`version()` loads). Note: feature unification means the default
+      workspace test build now compiles nacre-core WITH claude+openai-embed
+      (their offline unit tests run too — 69); tests remain zero-network.
 - [ ] Handle + write path: `Memory.open(path, deviceId)` wrapping Grit;
       `addEpisode(episode, options)` running the full pipeline with
       provider config passed from JS — `{provider: "anthropic" | "deepseek"

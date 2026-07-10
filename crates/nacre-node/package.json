@@ -1,0 +1,18 @@
+{
+  "name": "nacre-node",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Node.js bindings for nacre — agent memory on grit",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "binaryName": "nacre-node"
+  },
+  "scripts": {
+    "build": "napi build --platform",
+    "build:release": "napi build --platform --release"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0"
+  }
+}
