@@ -12,7 +12,9 @@ categories.workspace = true
 [dependencies]
 grit-core = "0.1"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# preserve_order matters: prompt rendering reproduces Python dict insertion
+# order (f-string repr and json.dumps), which BTreeMap ordering would break.
+serde_json = { version = "1.0", features = ["preserve_order"] }
 thiserror = "2.0.18"
 
 [dev-dependencies]

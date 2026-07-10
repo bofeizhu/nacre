@@ -33,8 +33,16 @@ increment. Conventions (binding for any agent working this file):
       defaults (`episode_indices=[0]`, optionals as explicit nulls), and a
       `ResponseSchema::NAME` trait carrying the Python class name into
       `CompletionRequest::schema_name`.
-- [ ] Verbatim prompt port: `extract_nodes` family → `nacre-core/src/extract/`
-      prompt module(s) with upstream-path comments + PROMPTS.md ledger rows.
+- [x] Verbatim prompt port: `extract_nodes` family → `src/prompts/extract_nodes.rs`
+      (all 8 functions) with upstream-path comments + PROMPTS.md ledger rows.
+      Established the fidelity mechanism used by every prompt port from here on:
+      `src/prompts/py.rs` (Python str()/repr interpolation emulation),
+      `src/prompts/helpers.rs` (json.dumps-compatible `to_prompt_json`;
+      serde_json now needs `preserve_order`), and pinned fixtures rendered from
+      the actual upstream Python by `oracle/promptgen/gen_prompt_fixtures.py`
+      (manual, offline) asserted byte-identical in `tests/prompt_fidelity.rs`.
+      Prompt modules live under `src/prompts/` 1:1 with upstream (not inside
+      the step modules) so diffs against the pin stay mechanical.
 - [ ] Verbatim prompt port: `extract_edges` family.
 - [ ] Verbatim prompt port: `dedupe_nodes` + `dedupe_edges` families.
 - [ ] Verbatim prompt port: `summarize_nodes` family (skip sagas — deferred,

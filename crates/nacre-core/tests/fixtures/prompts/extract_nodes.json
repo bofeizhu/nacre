@@ -1,0 +1,447 @@
+[
+ {
+  "function": "extract_message",
+  "case": "default",
+  "context": {
+   "entity_types": [
+    {
+     "entity_type_id": 0,
+     "entity_type_name": "Entity",
+     "entity_type_description": "Default entity classification. Use this entity type if the entity is not one of the other listed types."
+    },
+    {
+     "entity_type_id": 1,
+     "entity_type_name": "Person",
+     "entity_type_description": "A human being mentioned by name, e.g. \"Nisha's dad\" or 佐藤さん."
+    }
+   ],
+   "previous_episodes": [
+    {
+     "content": "Mina: The kiln room opened last month.",
+     "timestamp": "2026-07-01T09:30:00+00:00"
+    },
+    {
+     "content": "Owen: Jordan još vodi radionicu — 陶芸クラス.",
+     "timestamp": null
+    }
+   ],
+   "episode_content": "Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.",
+   "custom_extraction_instructions": ""
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are an entity extraction specialist for conversational messages. NEVER extract abstract concepts, feelings, or generic words."
+   },
+   {
+    "role": "user",
+    "content": "\nNEVER extract any of the following:\n- Pronouns (you, me, I, he, she, they, we, us, it, them, him, her, this, that, those)\n- Abstract concepts or feelings (joy, balance, growth, resilience, happiness, passion, motivation)\n- Generic common nouns or bare object words (day, life, people, work, stuff, things, food, time,\n  way, tickets, supplies, clothes, keys, gear)\n- Generic media/content nouns unless uniquely identified in the node name itself (photo, pic, picture,\n  image, video, post, story)\n- Generic event/activity nouns unless uniquely identified in the node name itself (event, game, meeting,\n  class, workshop, competition)\n- Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,\n  team, office)\n- Ambiguous bare nouns whose meaning depends on sentence context rather than the node name itself\n- Sentence fragments or clauses (\"what you really care about\", \"results of that effort\")\n- Adjectives or descriptive phrases (\"amazing\", \"something different\", \"new hair color\")\n- Duplicate references to the same real-world entity. Extract each entity at most once per message,\n  even if it appears multiple times or both as a speaker label and in the body text.\n- Bare relational or kinship terms (dad, mom, mother, father, sister, brother, husband, wife,\n  spouse, son, daughter, uncle, aunt, cousin, grandma, grandpa, friend, boss, teacher, neighbor,\n  roommate) and bare animal/pet words (dog, cat, pet, puppy, kitten). These are too generic on\n  their own. Instead, qualify them with the possessor: extract \"Nisha's dad\" not \"dad\",\n  \"Jordan's dog\" not \"dog\".\n- Bare generic objects that cannot be meaningfully qualified with a possessor, brand, or\n  distinguishing detail (e.g., NEVER extract \"supplies\" from \"I picked up some supplies\")\n\nYour task is to extract **entity nodes** that are **explicitly** mentioned in the CURRENT MESSAGE.\nPronoun references such as he/she/they or this/that/those should be disambiguated to the names of the\nreference entities. Only extract distinct entities from the CURRENT MESSAGE.\n\n<ENTITY TYPES>\n[{'entity_type_id': 0, 'entity_type_name': 'Entity', 'entity_type_description': 'Default entity classification. Use this entity type if the entity is not one of the other listed types.'}, {'entity_type_id': 1, 'entity_type_name': 'Person', 'entity_type_description': 'A human being mentioned by name, e.g. \"Nisha\\'s dad\" or 佐藤さん.'}]\n</ENTITY TYPES>\n\n<PREVIOUS MESSAGES>\n[{\"content\": \"Mina: The kiln room opened last month.\", \"timestamp\": \"2026-07-01T09:30:00+00:00\"}, {\"content\": \"Owen: Jordan još vodi radionicu — 陶芸クラス.\", \"timestamp\": null}]\n</PREVIOUS MESSAGES>\n\n<CURRENT MESSAGE>\nJordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\n</CURRENT MESSAGE>\n\n1. **Speaker Extraction**: Always extract the speaker (the part before the colon `:` in each dialogue line) as the first entity node.\n   - If the speaker is mentioned again in the message, treat both mentions as a **single entity**.\n\n2. **Entity Identification**:\n   - Extract named entities and specific, concrete things that are **explicitly** mentioned in the CURRENT MESSAGE.\n   - Only extract entities that are specific enough to be uniquely identifiable. Ask: \"Could this have its own Wikipedia article or database entry, OR is it specific enough to distinguish from other items of the same category within this conversation?\"\n   - For objects, possessions, and physical items, extract when they are specific enough\n     to distinguish from other items of the same category. SHOULD be extracted:\n     - Brand-named items (\"Gamecube\", \"Ford Mustang\", \"Moen faucet\")\n     - Qualified items (\"wool coat\", \"red and purple lighting\", \"cracked windshield\",\n       \"dog leash\")\n     - Items with a concrete distinguishing descriptor (color, material, size, model,\n       owner, specific use)\n     Should NOT be extracted:\n     - Bare head nouns alone (\"car\", \"coat\", \"game\", \"lighting\", \"windshield\")\n   - When a speaker or named person refers to a relative, pet, or associate using a bare term\n     (e.g., \"my dad\", \"his cat\"), extract the entity qualified with the possessor's name\n     (e.g., \"Nisha's dad\", \"Jordan's cat\"). Do NOT extract the bare term alone.\n   - **Exclude** entities mentioned only in the PREVIOUS MESSAGES (they are for context only).\n\n3. **Entity Classification**:\n   - Use the descriptions in ENTITY TYPES to classify each extracted entity.\n   - Assign the appropriate `entity_type_id` for each one.\n\n4. **Exclusions**:\n   - Do NOT extract entities representing relationships or actions.\n   - Do NOT extract dates, times, or other temporal information — these will be handled separately.\n   - When in doubt, do NOT extract.\n\n5. **Specificity**:\n   - Always use the **most specific form** mentioned in the message. If the message says \"road cycling\",\n     extract \"road cycling\" not \"cycling\". If it says \"wool coat\", extract \"wool coat\" not \"coat\".\n   - When context makes an object's type clear, include that context in the name. For example, if the\n     message mentions forgetting a leash while discussing a dog walk, extract \"dog leash\" not \"leash\".\n   - If a phrase would not be distinguishable when read alone later, do NOT extract it.\n\n6. **Formatting**:\n   - Be **explicit and unambiguous** in naming entities (e.g., use full names when available).\n\n<EXAMPLE>\nMessage: \"Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\"\nGood extractions: \"Jordan\" (speaker), \"Denver\" (Location), \"Lockheed Martin\" (Organization), \"Belmont Arts Center\" (Location), \"ceramics\" (Topic)\nDo NOT extract: \"spouse\" (generic reference — extract only if named), \"new role\" (not an entity), \"last month\" (temporal), \"we\" (pronoun)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Nisha: My dad is visiting next week. He loves walking his dogs in Riverside Park.\"\nGood extractions: \"Nisha\" (speaker), \"Nisha's dad\" (Person), \"Riverside Park\" (Location)\nDo NOT extract: \"dad\" (bare relational term — qualify as \"Nisha's dad\"), \"dogs\" (bare animal word — no specific identity), \"next week\" (temporal)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Mary: I forgot Trigger's leash so I couldn't take him on a dog walk. After that I went road cycling in my new wool coat.\"\nGood extractions: \"Mary\" (speaker), \"Trigger\" (animal name), \"dog leash\" (Object), \"road cycling\" (Topic), \"wool coat\" (Object)\nDo NOT extract: \"leash\" (too generic — use \"dog leash\"), \"cycling\" (too generic — use \"road cycling\"), \"coat\" (too generic — use \"wool coat\"), \"dog walk\" (activity, not an entity)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Nate: My gaming room has red and purple lighting and I mostly play on a Gamecube. Last week the windshield on my Mustang got cracked.\"\nGood extractions: \"Nate\" (speaker), \"gaming room\" (Object), \"red and purple lighting\" (Object), \"Gamecube\" (Object), \"Mustang\" (Object), \"cracked windshield\" (Object)\nDo NOT extract: \"lighting\" (bare head noun — use \"red and purple lighting\"), \"windshield\" (bare head noun — use \"cracked windshield\"), \"week\" (temporal)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Alex: I shared a pic from the game after the event.\"\nGood extractions: \"Alex\" (speaker)\nDo NOT extract: \"pic\" (generic media noun), \"game\" (generic event noun), \"event\" (generic event noun)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Jordan: We won by a tight score. Scoring that last basket felt incredible.\"\nGood extractions: \"Jordan\" (speaker)\nDo NOT extract: \"basket\" (ambiguous bare noun that depends on sentence context)\n</EXAMPLE>\n\n\n"
+   }
+  ]
+ },
+ {
+  "function": "extract_message",
+  "case": "with_attribution",
+  "context": {
+   "entity_types": [
+    {
+     "entity_type_id": 0,
+     "entity_type_name": "Entity",
+     "entity_type_description": "Default entity classification. Use this entity type if the entity is not one of the other listed types."
+    },
+    {
+     "entity_type_id": 1,
+     "entity_type_name": "Person",
+     "entity_type_description": "A human being mentioned by name, e.g. \"Nisha's dad\" or 佐藤さん."
+    }
+   ],
+   "previous_episodes": [],
+   "episode_content": "[Episode 0] (2026-07-09T12:00:00+00:00)\nJordan: hello\n[Episode 1] (2026-07-10T12:00:00+00:00)\nMina: bye",
+   "custom_extraction_instructions": "Focus on people.\n7. **Episode Attribution**: The content contains multiple episodes labeled [Episode 0], [Episode 1], etc. Each episode header includes a timestamp indicating when that episode occurred. For each extracted entity, set `episode_indices` to the 0-based list of episode numbers where that entity is mentioned. An entity appearing in Episodes 0 and 2 should have `episode_indices: [0, 2]`."
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are an entity extraction specialist for conversational messages. NEVER extract abstract concepts, feelings, or generic words."
+   },
+   {
+    "role": "user",
+    "content": "\nNEVER extract any of the following:\n- Pronouns (you, me, I, he, she, they, we, us, it, them, him, her, this, that, those)\n- Abstract concepts or feelings (joy, balance, growth, resilience, happiness, passion, motivation)\n- Generic common nouns or bare object words (day, life, people, work, stuff, things, food, time,\n  way, tickets, supplies, clothes, keys, gear)\n- Generic media/content nouns unless uniquely identified in the node name itself (photo, pic, picture,\n  image, video, post, story)\n- Generic event/activity nouns unless uniquely identified in the node name itself (event, game, meeting,\n  class, workshop, competition)\n- Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,\n  team, office)\n- Ambiguous bare nouns whose meaning depends on sentence context rather than the node name itself\n- Sentence fragments or clauses (\"what you really care about\", \"results of that effort\")\n- Adjectives or descriptive phrases (\"amazing\", \"something different\", \"new hair color\")\n- Duplicate references to the same real-world entity. Extract each entity at most once per message,\n  even if it appears multiple times or both as a speaker label and in the body text.\n- Bare relational or kinship terms (dad, mom, mother, father, sister, brother, husband, wife,\n  spouse, son, daughter, uncle, aunt, cousin, grandma, grandpa, friend, boss, teacher, neighbor,\n  roommate) and bare animal/pet words (dog, cat, pet, puppy, kitten). These are too generic on\n  their own. Instead, qualify them with the possessor: extract \"Nisha's dad\" not \"dad\",\n  \"Jordan's dog\" not \"dog\".\n- Bare generic objects that cannot be meaningfully qualified with a possessor, brand, or\n  distinguishing detail (e.g., NEVER extract \"supplies\" from \"I picked up some supplies\")\n\nYour task is to extract **entity nodes** that are **explicitly** mentioned in the CURRENT MESSAGE.\nPronoun references such as he/she/they or this/that/those should be disambiguated to the names of the\nreference entities. Only extract distinct entities from the CURRENT MESSAGE.\n\n<ENTITY TYPES>\n[{'entity_type_id': 0, 'entity_type_name': 'Entity', 'entity_type_description': 'Default entity classification. Use this entity type if the entity is not one of the other listed types.'}, {'entity_type_id': 1, 'entity_type_name': 'Person', 'entity_type_description': 'A human being mentioned by name, e.g. \"Nisha\\'s dad\" or 佐藤さん.'}]\n</ENTITY TYPES>\n\n<PREVIOUS MESSAGES>\n[]\n</PREVIOUS MESSAGES>\n\n<CURRENT MESSAGE>\n[Episode 0] (2026-07-09T12:00:00+00:00)\nJordan: hello\n[Episode 1] (2026-07-10T12:00:00+00:00)\nMina: bye\n</CURRENT MESSAGE>\n\n1. **Speaker Extraction**: Always extract the speaker (the part before the colon `:` in each dialogue line) as the first entity node.\n   - If the speaker is mentioned again in the message, treat both mentions as a **single entity**.\n\n2. **Entity Identification**:\n   - Extract named entities and specific, concrete things that are **explicitly** mentioned in the CURRENT MESSAGE.\n   - Only extract entities that are specific enough to be uniquely identifiable. Ask: \"Could this have its own Wikipedia article or database entry, OR is it specific enough to distinguish from other items of the same category within this conversation?\"\n   - For objects, possessions, and physical items, extract when they are specific enough\n     to distinguish from other items of the same category. SHOULD be extracted:\n     - Brand-named items (\"Gamecube\", \"Ford Mustang\", \"Moen faucet\")\n     - Qualified items (\"wool coat\", \"red and purple lighting\", \"cracked windshield\",\n       \"dog leash\")\n     - Items with a concrete distinguishing descriptor (color, material, size, model,\n       owner, specific use)\n     Should NOT be extracted:\n     - Bare head nouns alone (\"car\", \"coat\", \"game\", \"lighting\", \"windshield\")\n   - When a speaker or named person refers to a relative, pet, or associate using a bare term\n     (e.g., \"my dad\", \"his cat\"), extract the entity qualified with the possessor's name\n     (e.g., \"Nisha's dad\", \"Jordan's cat\"). Do NOT extract the bare term alone.\n   - **Exclude** entities mentioned only in the PREVIOUS MESSAGES (they are for context only).\n\n3. **Entity Classification**:\n   - Use the descriptions in ENTITY TYPES to classify each extracted entity.\n   - Assign the appropriate `entity_type_id` for each one.\n\n4. **Exclusions**:\n   - Do NOT extract entities representing relationships or actions.\n   - Do NOT extract dates, times, or other temporal information — these will be handled separately.\n   - When in doubt, do NOT extract.\n\n5. **Specificity**:\n   - Always use the **most specific form** mentioned in the message. If the message says \"road cycling\",\n     extract \"road cycling\" not \"cycling\". If it says \"wool coat\", extract \"wool coat\" not \"coat\".\n   - When context makes an object's type clear, include that context in the name. For example, if the\n     message mentions forgetting a leash while discussing a dog walk, extract \"dog leash\" not \"leash\".\n   - If a phrase would not be distinguishable when read alone later, do NOT extract it.\n\n6. **Formatting**:\n   - Be **explicit and unambiguous** in naming entities (e.g., use full names when available).\n\n<EXAMPLE>\nMessage: \"Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\"\nGood extractions: \"Jordan\" (speaker), \"Denver\" (Location), \"Lockheed Martin\" (Organization), \"Belmont Arts Center\" (Location), \"ceramics\" (Topic)\nDo NOT extract: \"spouse\" (generic reference — extract only if named), \"new role\" (not an entity), \"last month\" (temporal), \"we\" (pronoun)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Nisha: My dad is visiting next week. He loves walking his dogs in Riverside Park.\"\nGood extractions: \"Nisha\" (speaker), \"Nisha's dad\" (Person), \"Riverside Park\" (Location)\nDo NOT extract: \"dad\" (bare relational term — qualify as \"Nisha's dad\"), \"dogs\" (bare animal word — no specific identity), \"next week\" (temporal)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Mary: I forgot Trigger's leash so I couldn't take him on a dog walk. After that I went road cycling in my new wool coat.\"\nGood extractions: \"Mary\" (speaker), \"Trigger\" (animal name), \"dog leash\" (Object), \"road cycling\" (Topic), \"wool coat\" (Object)\nDo NOT extract: \"leash\" (too generic — use \"dog leash\"), \"cycling\" (too generic — use \"road cycling\"), \"coat\" (too generic — use \"wool coat\"), \"dog walk\" (activity, not an entity)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Nate: My gaming room has red and purple lighting and I mostly play on a Gamecube. Last week the windshield on my Mustang got cracked.\"\nGood extractions: \"Nate\" (speaker), \"gaming room\" (Object), \"red and purple lighting\" (Object), \"Gamecube\" (Object), \"Mustang\" (Object), \"cracked windshield\" (Object)\nDo NOT extract: \"lighting\" (bare head noun — use \"red and purple lighting\"), \"windshield\" (bare head noun — use \"cracked windshield\"), \"week\" (temporal)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Alex: I shared a pic from the game after the event.\"\nGood extractions: \"Alex\" (speaker)\nDo NOT extract: \"pic\" (generic media noun), \"game\" (generic event noun), \"event\" (generic event noun)\n</EXAMPLE>\n\n<EXAMPLE>\nMessage: \"Jordan: We won by a tight score. Scoring that last basket felt incredible.\"\nGood extractions: \"Jordan\" (speaker)\nDo NOT extract: \"basket\" (ambiguous bare noun that depends on sentence context)\n</EXAMPLE>\n\nFocus on people.\n7. **Episode Attribution**: The content contains multiple episodes labeled [Episode 0], [Episode 1], etc. Each episode header includes a timestamp indicating when that episode occurred. For each extracted entity, set `episode_indices` to the 0-based list of episode numbers where that entity is mentioned. An entity appearing in Episodes 0 and 2 should have `episode_indices: [0, 2]`.\n"
+   }
+  ]
+ },
+ {
+  "function": "extract_json",
+  "case": "default",
+  "context": {
+   "entity_types": [
+    {
+     "entity_type_id": 0,
+     "entity_type_name": "Entity",
+     "entity_type_description": "Default entity classification. Use this entity type if the entity is not one of the other listed types."
+    },
+    {
+     "entity_type_id": 1,
+     "entity_type_name": "Person",
+     "entity_type_description": "A human being mentioned by name, e.g. \"Nisha's dad\" or 佐藤さん."
+    }
+   ],
+   "source_description": "CRM export — 顧客データ",
+   "episode_content": "{\"user\": \"Jordan Lee\", \"company\": \"Acme Corp\", \"active\": true}",
+   "custom_extraction_instructions": ""
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are an entity extraction specialist for JSON data. NEVER extract abstract concepts, dates, or generic field values."
+   },
+   {
+    "role": "user",
+    "content": "\nNEVER extract:\n- Date, time, or timestamp values\n- Abstract concepts or generic field values (e.g., \"true\", \"active\", \"pending\")\n- Numeric IDs or codes that are not meaningful entity names\n- Bare relational or kinship terms (e.g., \"spouse\", \"parent\", \"pet\") — only extract if qualified\n  with a possessor name\n- Bare generic objects or common nouns (e.g., \"supplies\", \"tickets\", \"gear\") — only extract if\n  qualified with a distinguishing detail\n- Generic media/content nouns unless uniquely identified in the value itself (photo, pic, picture,\n  image, video, post, story)\n- Generic event/activity nouns unless uniquely identified in the value itself (event, game, meeting,\n  class, workshop, competition)\n- Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,\n  team, office)\n- Ambiguous bare nouns whose meaning depends on surrounding text rather than the extracted value itself\n\nExtract entities from the JSON and classify each using the ENTITY TYPES above.\n\n<ENTITY TYPES>\n[{'entity_type_id': 0, 'entity_type_name': 'Entity', 'entity_type_description': 'Default entity classification. Use this entity type if the entity is not one of the other listed types.'}, {'entity_type_id': 1, 'entity_type_name': 'Person', 'entity_type_description': 'A human being mentioned by name, e.g. \"Nisha\\'s dad\" or 佐藤さん.'}]\n</ENTITY TYPES>\n\n<SOURCE DESCRIPTION>\nCRM export — 顧客データ\n</SOURCE DESCRIPTION>\n\n<JSON>\n{\"user\": \"Jordan Lee\", \"company\": \"Acme Corp\", \"active\": true}\n</JSON>\n\nGuidelines:\n1. Extract the primary entity the JSON represents (e.g., a \"name\" or \"user\" field).\n2. Extract named entities referenced in other properties throughout the JSON structure.\n3. Only extract entities specific enough to be uniquely identifiable.\n4. Be explicit in naming entities — use full names when available.\n5. Use the most specific form present in the data (e.g., \"road cycling\" not \"cycling\").\n6. If a value would not be meaningful and distinguishable when read alone later, do NOT extract it.\n\n\n\n<EXAMPLE>\nJSON: {\"user\": \"Jordan Lee\", \"company\": \"Acme Corp\", \"role\": \"engineer\", \"start_date\": \"2024-01-15\", \"location\": \"Denver\", \"active\": true}\nGood extractions: \"Jordan Lee\" (Person), \"Acme Corp\" (Organization), \"Denver\" (Location)\nDo NOT extract: \"engineer\" (role, not an entity), \"2024-01-15\" (date), \"true\" (field value)\n</EXAMPLE>\n\n<EXAMPLE>\nJSON: {\"author\": \"Alex\", \"attachment_type\": \"photo\", \"event_name\": \"event\", \"agency\": \"government\"}\nGood extractions: \"Alex\" (Person)\nDo NOT extract: \"photo\" (generic media noun), \"event\" (generic event noun), \"government\" (broad institutional noun)\n</EXAMPLE>\n"
+   }
+  ]
+ },
+ {
+  "function": "extract_text",
+  "case": "default",
+  "context": {
+   "entity_types": [
+    {
+     "entity_type_id": 0,
+     "entity_type_name": "Entity",
+     "entity_type_description": "Default entity classification. Use this entity type if the entity is not one of the other listed types."
+    },
+    {
+     "entity_type_id": 1,
+     "entity_type_name": "Person",
+     "entity_type_description": "A human being mentioned by name, e.g. \"Nisha's dad\" or 佐藤さん."
+    }
+   ],
+   "episode_content": "Dr. Amara Osei presented her migraine study at the AAN conference.",
+   "custom_extraction_instructions": "Prefer full names."
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are an entity extraction specialist for unstructured text. NEVER extract abstract concepts, feelings, or generic words."
+   },
+   {
+    "role": "user",
+    "content": "\nNEVER extract:\n- Pronouns (you, me, he, she, they, it, them, him, her, we, us, this, that, those)\n- Abstract concepts (joy, balance, growth, resilience, passion, motivation)\n- Generic common nouns or bare object words (day, life, people, work, stuff, things, food, time,\n  tickets, supplies, clothes, keys, gear)\n- Generic media/content nouns unless uniquely identified in the node name itself (photo, pic, picture,\n  image, video, post, story)\n- Generic event/activity nouns unless uniquely identified in the node name itself (event, game, meeting,\n  class, workshop, competition)\n- Broad institutional nouns unless explicitly named or uniquely qualified (government, school, company,\n  team, office)\n- Ambiguous bare nouns whose meaning depends on sentence context rather than the node name itself\n- Sentence fragments or clauses as entity names\n- Bare relational or kinship terms (dad, mom, sister, brother, spouse, friend, boss, pet, dog,\n  cat) unless qualified with a possessor (e.g., \"Nisha's dad\" is acceptable, \"dad\" alone is not)\n- Bare generic objects that cannot be meaningfully qualified with a possessor, brand, or\n  distinguishing detail (e.g., NEVER extract \"supplies\" from \"I picked up some supplies\")\n\nExtract entities from the TEXT that are **explicitly mentioned**.\nFor each entity, classify it using the ENTITY TYPES above.\nOnly extract entities specific enough to be uniquely identifiable — ask: \"Could this have its own Wikipedia article or database entry?\"\n\n<ENTITY TYPES>\n[{'entity_type_id': 0, 'entity_type_name': 'Entity', 'entity_type_description': 'Default entity classification. Use this entity type if the entity is not one of the other listed types.'}, {'entity_type_id': 1, 'entity_type_name': 'Person', 'entity_type_description': 'A human being mentioned by name, e.g. \"Nisha\\'s dad\" or 佐藤さん.'}]\n</ENTITY TYPES>\n\n<TEXT>\nDr. Amara Osei presented her migraine study at the AAN conference.\n</TEXT>\n\nGuidelines:\n1. Extract named entities and specific, concrete things.\n2. Do not create nodes for relationships or actions.\n3. Do not create nodes for temporal information like dates, times or years.\n4. Be explicit in node names, using full names and avoiding abbreviations.\n5. Always use the most specific form from the text (e.g., \"road cycling\" not \"cycling\",\n   \"wool coat\" not \"coat\"). Include qualifying context when it's clear from the text.\n6. When the text refers to a person's relative, pet, or associate by a bare term, qualify the\n   entity with the possessor's name (e.g., \"Dr. Osei's colleague\" not \"colleague\").\n7. If a phrase would not be meaningful and distinguishable when read alone later, do NOT extract it.\n8. When in doubt, do NOT extract.\n\nPrefer full names.\n\n<EXAMPLE>\nText: \"Dr. Amara Osei presented her migraine study results at the AAN conference. The study tracked 340 patients using a new CGRP combination protocol.\"\nGood extractions: \"Dr. Amara Osei\" (Person), \"AAN\" (Organization), \"migraine study\" (Topic), \"CGRP combination protocol\" (Object)\nDo NOT extract: \"results\" (generic noun), \"340\" (number), \"patients\" (generic noun), \"conference\" (generic without a specific name)\n</EXAMPLE>\n\n<EXAMPLE>\nText: \"Alex shared a pic after the event and said scoring the last basket felt incredible.\"\nGood extractions: \"Alex\" (Person)\nDo NOT extract: \"pic\" (generic media noun), \"event\" (generic event noun), \"basket\" (ambiguous bare noun)\n</EXAMPLE>\n"
+   }
+  ]
+ },
+ {
+  "function": "classify_nodes",
+  "case": "default",
+  "context": {
+   "previous_episodes": [
+    {
+     "content": "Mina: The kiln room opened last month.",
+     "timestamp": "2026-07-01T09:30:00+00:00"
+    },
+    {
+     "content": "Owen: Jordan još vodi radionicu — 陶芸クラス.",
+     "timestamp": null
+    }
+   ],
+   "episode_content": "Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.",
+   "extracted_entities": [
+    {
+     "id": 0,
+     "name": "Jordan"
+    },
+    {
+     "id": 1,
+     "name": "Nisha's dad"
+    }
+   ],
+   "entity_types": [
+    {
+     "entity_type_id": 0,
+     "entity_type_name": "Entity",
+     "entity_type_description": "Default entity classification. Use this entity type if the entity is not one of the other listed types."
+    },
+    {
+     "entity_type_id": 1,
+     "entity_type_name": "Person",
+     "entity_type_description": "A human being mentioned by name, e.g. \"Nisha's dad\" or 佐藤さん."
+    }
+   ]
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are an entity classification specialist. NEVER assign types not listed in ENTITY TYPES."
+   },
+   {
+    "role": "user",
+    "content": "\n<PREVIOUS MESSAGES>\n[{\"content\": \"Mina: The kiln room opened last month.\", \"timestamp\": \"2026-07-01T09:30:00+00:00\"}, {\"content\": \"Owen: Jordan još vodi radionicu — 陶芸クラス.\", \"timestamp\": null}]\n</PREVIOUS MESSAGES>\n\n<CURRENT MESSAGE>\nJordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\n</CURRENT MESSAGE>\n\n<EXTRACTED ENTITIES>\n[{'id': 0, 'name': 'Jordan'}, {'id': 1, 'name': \"Nisha's dad\"}]\n</EXTRACTED ENTITIES>\n\n<ENTITY TYPES>\n[{'entity_type_id': 0, 'entity_type_name': 'Entity', 'entity_type_description': 'Default entity classification. Use this entity type if the entity is not one of the other listed types.'}, {'entity_type_id': 1, 'entity_type_name': 'Person', 'entity_type_description': 'A human being mentioned by name, e.g. \"Nisha\\'s dad\" or 佐藤さん.'}]\n</ENTITY TYPES>\n\nGiven the above conversation, extracted entities, and provided entity types and their descriptions, classify the extracted entities.\n\nGuidelines:\n1. Each entity must have exactly one type.\n2. NEVER use types not listed in ENTITY TYPES.\n3. If none of the provided entity types accurately classify an extracted entity, the type should be set to None.\n"
+   }
+  ]
+ },
+ {
+  "function": "extract_attributes",
+  "case": "default",
+  "context": {
+   "previous_episodes": [
+    {
+     "content": "Mina: The kiln room opened last month.",
+     "timestamp": "2026-07-01T09:30:00+00:00"
+    },
+    {
+     "content": "Owen: Jordan još vodi radionicu — 陶芸クラス.",
+     "timestamp": null
+    }
+   ],
+   "episode_content": "Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.",
+   "node": {
+    "name": "Jordan Lee",
+    "entity_types": [
+     "Entity",
+     "Person"
+    ],
+    "attributes": {
+     "phones": "415-555-0142",
+     "industry": null
+    }
+   }
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are an entity attribute extraction specialist. You ONLY emit attribute values that are explicitly stated in MESSAGES or already present on the ENTITY. You output strictly the JSON specified by the response schema — no reasoning, no explanation, no commentary in any field."
+   },
+   {
+    "role": "user",
+    "content": "Given the MESSAGES and the following ENTITY, update its attributes.\n\nHARD RULES — violating any of these is a failure:\n\n1. Each attribute value MUST be one of:\n   (a) a clean value copied or directly normalized from text in MESSAGES,\n   (b) the existing value already on the ENTITY (preserved unchanged), or\n   (c) null / omitted, when neither (a) nor (b) applies.\n\n2. NEVER write reasoning, justification, or commentary into any field. Specifically:\n   - NEVER include parenthetical explanations like \"(implied by ...)\", \"(Context: ...)\",\n     \"(not explicitly stated ...)\", \"(based on ...)\".\n   - NEVER include first-person or deliberative phrases like \"I should...\", \"However...\",\n     \"Sticking to...\", \"Since no...\", \"the instruction is to...\", \"must be kept...\",\n     \"if no value is present...\".\n   - NEVER list alternatives or candidates inside one field (\"X, or Y, or maybe Z\").\n   - NEVER explain why a value is null. If unknown, set the field to null and stop.\n\n3. Each attribute schema description (e.g. an \"Industry sector\" field whose description\n   reads \"Industry classification, single word where possible\") tells you the FORMAT a\n   real value should take. The description text is NEVER itself a value. NEVER copy\n   schema description text into the field.\n\n4. The literal strings \"null\", \"N/A\", \"Not specified\", \"unknown\", \"none\", \"not provided\",\n   or any sentence describing absence are NOT valid values. If no value is supported by\n   MESSAGES, set the field to null (or omit it) — do not write a sentence.\n\n5. Each attribute value must be a short, well-formed instance of the type the field\n   describes (a phone number, an industry name, a URL, a postal address). If you cannot\n   produce a clean value of that type from MESSAGES, the field is null.\n\n6. NEVER infer attribute values from the entity's name, from related entities, from\n   generic world knowledge, or from prior summaries. Only verbatim or directly normalized\n   text from MESSAGES qualifies as a new value.\n\n7. If MESSAGES contain no information about an attribute, leave the existing entity\n   value unchanged. If the entity has no existing value, the field is null.\n\nEXAMPLES\n\nENTITY: {\"name\": \"Sam Rivera\", \"phones\": \"415-555-0142\"}\nMESSAGES contain no phone information for Sam.\nGOOD → \"phones\": \"415-555-0142\"   (preserved existing value)\nBAD  → \"phones\": \"415-555-0142 (implied by original entity, but no new information in\n        messages, retaining original value as per instruction...)\"\n\nENTITY: {\"name\": \"Northwind\", \"industry\": null}\nMESSAGES mention Northwind only as the platform some content was posted to.\nGOOD → \"industry\": null   (no explicit industry classification was stated)\nBAD  → \"industry\": \"Content platform, SaaS (implied by usage context, though not stated\n        explicitly as industry classification...)\"\n\nENTITY: {\"name\": \"Priya\"}\nMESSAGES contain no phone for Priya, but discuss a project she contributed to.\nGOOD → \"phones\": null\nBAD  → \"phones\": \"Worked with Lin and Marco on the Q3 launch...\"   (off-topic content dump)\n\n<MESSAGES>\n[{\"content\": \"Mina: The kiln room opened last month.\", \"timestamp\": \"2026-07-01T09:30:00+00:00\"}, {\"content\": \"Owen: Jordan još vodi radionicu — 陶芸クラス.\", \"timestamp\": null}]\n\"Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\"\n</MESSAGES>\n\n<ENTITY>\n{'name': 'Jordan Lee', 'entity_types': ['Entity', 'Person'], 'attributes': {'phones': '415-555-0142', 'industry': None}}\n</ENTITY>\n"
+   }
+  ]
+ },
+ {
+  "function": "extract_summary",
+  "case": "default",
+  "context": {
+   "previous_episodes": [
+    {
+     "content": "Mina: The kiln room opened last month.",
+     "timestamp": "2026-07-01T09:30:00+00:00"
+    },
+    {
+     "content": "Owen: Jordan još vodi radionicu — 陶芸クラス.",
+     "timestamp": null
+    }
+   ],
+   "episode_content": "Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.",
+   "node": {
+    "name": "Jordan Lee",
+    "entity_types": [
+     "Entity",
+     "Person"
+    ],
+    "attributes": {
+     "phones": "415-555-0142",
+     "industry": null
+    }
+   }
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are a helpful assistant that extracts entity summaries from the provided text."
+   },
+   {
+    "role": "user",
+    "content": "\n        Given the MESSAGES and the ENTITY, update the summary that combines relevant information about the entity\n        from the messages and relevant information from the existing summary. Summary must be under 1000 characters.\n\n        Guidelines:\n        1. Output only factual content. Never explain what you're doing, why, or mention limitations or constraints.\n        2. Only use the provided messages, entity, and entity context to set attribute values.\n        3. Keep the summary information-dense and entity-specific. STATE FACTS DIRECTLY IN UNDER 1000 CHARACTERS.\n        4. Preserve all materially relevant names, roles, places, dates, counts, and temporal qualifiers that are explicitly supported.\n        5. Prefer compact factual sentences over vague thematic phrasing or meta-language.\n        6. When the durable fact is the content of what was said, state the content directly instead of narrating that it was said.\n        7. Use communication verbs only when the act of speaking, asking, sharing, presenting, announcing, or telling is itself the important fact.\n        8. Never use filler verbs like \"mentioned\", \"described\", \"stated\", \"reported\", \"noted\", \"discussed\", \"referenced\", or \"indicated\" unless the communication act itself is the fact.\n        9. Include temporal anchors when the messages provide them and they help ground the fact.\n        10. Begin with the entity name or a direct fact, not with \"A\", \"An\", \"The\", or \"This is\" unless that wording is part of the entity name.\n\n        Example summary:\n        BAD: \"The context shows John ordered pizza. Due to length constraints, other details are omitted from this summary.\"\n        GOOD: \"John ordered pepperoni pizza from Mario's at 7:30 PM and had it delivered to the office.\"\n        \n\n        <MESSAGES>\n        [{\"content\": \"Mina: The kiln room opened last month.\", \"timestamp\": \"2026-07-01T09:30:00+00:00\"}, {\"content\": \"Owen: Jordan još vodi radionicu — 陶芸クラス.\", \"timestamp\": null}]\n        \"Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\"\n        </MESSAGES>\n\n        <ENTITY>\n        {'name': 'Jordan Lee', 'entity_types': ['Entity', 'Person'], 'attributes': {'phones': '415-555-0142', 'industry': None}}\n        </ENTITY>\n        "
+   }
+  ]
+ },
+ {
+  "function": "extract_summaries_batch",
+  "case": "default",
+  "context": {
+   "previous_episodes": [
+    {
+     "content": "Mina: The kiln room opened last month.",
+     "timestamp": "2026-07-01T09:30:00+00:00"
+    },
+    {
+     "content": "Owen: Jordan još vodi radionicu — 陶芸クラス.",
+     "timestamp": null
+    }
+   ],
+   "episode_content": "Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.",
+   "entities": [
+    {
+     "name": "Jordan Lee",
+     "summary": "Jordan Lee works at Belmont Arts Center.",
+     "entity_types": [
+      "Person"
+     ],
+     "attributes": {}
+    },
+    {
+     "name": "Belmont Arts Center",
+     "summary": "",
+     "entity_types": [
+      "Entity"
+     ],
+     "attributes": {}
+    }
+   ]
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are a helpful assistant that generates concise entity summaries from provided context."
+   },
+   {
+    "role": "user",
+    "content": "\nGiven the MESSAGES and a list of ENTITIES, generate an updated summary for each entity that needs one.\nEach summary must be under 1000 characters.\n\nGuidelines:\n        1. Output only factual content. Never explain what you're doing, why, or mention limitations or constraints.\n        2. Only use the provided messages, entity, and entity context to set attribute values.\n        3. Keep the summary information-dense and entity-specific. STATE FACTS DIRECTLY IN UNDER 1000 CHARACTERS.\n        4. Preserve all materially relevant names, roles, places, dates, counts, and temporal qualifiers that are explicitly supported.\n        5. Prefer compact factual sentences over vague thematic phrasing or meta-language.\n        6. When the durable fact is the content of what was said, state the content directly instead of narrating that it was said.\n        7. Use communication verbs only when the act of speaking, asking, sharing, presenting, announcing, or telling is itself the important fact.\n        8. Never use filler verbs like \"mentioned\", \"described\", \"stated\", \"reported\", \"noted\", \"discussed\", \"referenced\", or \"indicated\" unless the communication act itself is the fact.\n        9. Include temporal anchors when the messages provide them and they help ground the fact.\n        10. Begin with the entity name or a direct fact, not with \"A\", \"An\", \"The\", or \"This is\" unless that wording is part of the entity name.\n\n        Example summary:\n        BAD: \"The context shows John ordered pizza. Due to length constraints, other details are omitted from this summary.\"\n        GOOD: \"John ordered pepperoni pizza from Mario's at 7:30 PM and had it delivered to the office.\"\n        \n\n<MESSAGES>\n[{\"content\": \"Mina: The kiln room opened last month.\", \"timestamp\": \"2026-07-01T09:30:00+00:00\"}, {\"content\": \"Owen: Jordan još vodi radionicu — 陶芸クラス.\", \"timestamp\": null}]\n\"Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\"\n</MESSAGES>\n\n<ENTITIES>\n[{\"name\": \"Jordan Lee\", \"summary\": \"Jordan Lee works at Belmont Arts Center.\", \"entity_types\": [\"Person\"], \"attributes\": {}}, {\"name\": \"Belmont Arts Center\", \"summary\": \"\", \"entity_types\": [\"Entity\"], \"attributes\": {}}]\n</ENTITIES>\n\nFor each entity, combine relevant information from the MESSAGES with any existing summary content.\nOnly return summaries for entities that have meaningful information to summarize.\nIf an entity has no relevant information in the messages and no existing summary, you may skip it.\n"
+   }
+  ]
+ },
+ {
+  "function": "extract_summaries_batch",
+  "case": "with_type_descriptions",
+  "context": {
+   "previous_episodes": [
+    {
+     "content": "Mina: The kiln room opened last month.",
+     "timestamp": "2026-07-01T09:30:00+00:00"
+    },
+    {
+     "content": "Owen: Jordan još vodi radionicu — 陶芸クラス.",
+     "timestamp": null
+    }
+   ],
+   "episode_content": "Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.",
+   "entities": [
+    {
+     "name": "Jordan Lee",
+     "summary": "Jordan Lee works at Belmont Arts Center.",
+     "entity_types": [
+      "Person"
+     ],
+     "attributes": {}
+    },
+    {
+     "name": "Belmont Arts Center",
+     "summary": "",
+     "entity_types": [
+      "Entity"
+     ],
+     "attributes": {}
+    }
+   ],
+   "entity_type_descriptions": {
+    "Person": "A human being mentioned by name.",
+    "Entity": "Default entity classification."
+   }
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are a helpful assistant that generates concise entity summaries from provided context."
+   },
+   {
+    "role": "user",
+    "content": "\nGiven the MESSAGES and a list of ENTITIES, generate an updated summary for each entity that needs one.\nEach summary must be under 1000 characters.\n\nGuidelines:\n        1. Output only factual content. Never explain what you're doing, why, or mention limitations or constraints.\n        2. Only use the provided messages, entity, and entity context to set attribute values.\n        3. Keep the summary information-dense and entity-specific. STATE FACTS DIRECTLY IN UNDER 1000 CHARACTERS.\n        4. Preserve all materially relevant names, roles, places, dates, counts, and temporal qualifiers that are explicitly supported.\n        5. Prefer compact factual sentences over vague thematic phrasing or meta-language.\n        6. When the durable fact is the content of what was said, state the content directly instead of narrating that it was said.\n        7. Use communication verbs only when the act of speaking, asking, sharing, presenting, announcing, or telling is itself the important fact.\n        8. Never use filler verbs like \"mentioned\", \"described\", \"stated\", \"reported\", \"noted\", \"discussed\", \"referenced\", or \"indicated\" unless the communication act itself is the fact.\n        9. Include temporal anchors when the messages provide them and they help ground the fact.\n        10. Begin with the entity name or a direct fact, not with \"A\", \"An\", \"The\", or \"This is\" unless that wording is part of the entity name.\n\n        Example summary:\n        BAD: \"The context shows John ordered pizza. Due to length constraints, other details are omitted from this summary.\"\n        GOOD: \"John ordered pepperoni pizza from Mario's at 7:30 PM and had it delivered to the office.\"\n        \n\n<MESSAGES>\n[{\"content\": \"Mina: The kiln room opened last month.\", \"timestamp\": \"2026-07-01T09:30:00+00:00\"}, {\"content\": \"Owen: Jordan još vodi radionicu — 陶芸クラス.\", \"timestamp\": null}]\n\"Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\"\n</MESSAGES>\n\n<ENTITY_TYPE_DESCRIPTIONS>\n{\"Person\": \"A human being mentioned by name.\", \"Entity\": \"Default entity classification.\"}\n</ENTITY_TYPE_DESCRIPTIONS>\nWhen an entity's type appears in ENTITY_TYPE_DESCRIPTIONS, use the description to decide which facts are most relevant to that entity type. NEVER mention the entity type, type description, or classification in the summary text itself.\n\n<ENTITIES>\n[{\"name\": \"Jordan Lee\", \"summary\": \"Jordan Lee works at Belmont Arts Center.\", \"entity_types\": [\"Person\"], \"attributes\": {}}, {\"name\": \"Belmont Arts Center\", \"summary\": \"\", \"entity_types\": [\"Entity\"], \"attributes\": {}}]\n</ENTITIES>\n\nFor each entity, combine relevant information from the MESSAGES with any existing summary content.\nOnly return summaries for entities that have meaningful information to summarize.\nIf an entity has no relevant information in the messages and no existing summary, you may skip it.\n"
+   }
+  ]
+ },
+ {
+  "function": "extract_entity_summaries_from_episodes",
+  "case": "default",
+  "context": {
+   "previous_episodes": [
+    {
+     "content": "Mina: The kiln room opened last month.",
+     "timestamp": "2026-07-01T09:30:00+00:00"
+    },
+    {
+     "content": "Owen: Jordan još vodi radionicu — 陶芸クラス.",
+     "timestamp": null
+    }
+   ],
+   "episode_content": "Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.",
+   "entities": [
+    {
+     "name": "Jordan Lee",
+     "summary": "Jordan Lee works at Belmont Arts Center.",
+     "entity_types": [
+      "Person"
+     ],
+     "attributes": {}
+    },
+    {
+     "name": "Belmont Arts Center",
+     "summary": "",
+     "entity_types": [
+      "Entity"
+     ],
+     "attributes": {}
+    }
+   ]
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You maintain detailed, information-dense entity memories from episode text.\n\nUse ONLY facts explicitly stated in EPISODES and durable facts already present in EXISTING_SUMMARY.\nNEVER infer beyond what is directly supported.\n\nPrimary goal:\nWrite a dense factual summary of the entity that preserves as many supported details as possible while staying coherent and durable.\n\nWhen the input includes entity_type_descriptions, use them to decide which facts are most relevant to the entity type. NEVER mention the entity type, type description, or classification in the summary text itself.\n\nWhat to capture:\n- Stable facts about the entity\n- All materially relevant named people, organizations, places, events, documents, objects, and other entities linked to it\n- Explicit actions, roles, responsibilities, relationships, and outcomes\n- Counts, sequences, and repeated patterns when the evidence supports them\n- Temporal details at the highest fidelity available: dates, months, years, ordering, and changes over time\n- Current state over superseded state when newer episodes clearly update older information\n\nRules:\n- Be exhaustive within the evidence. Prefer retaining a supported concrete detail over omitting it for brevity.\n- NEVER infer preferences, habits, recurrence, frequency, causality, intent, importance, or category from a name, a single mention, or weak evidence.\n- Only describe something as recurring, preferred, typical, habitual, or ongoing when multiple episodes explicitly support that claim or one episode states it directly.\n- Include all materially relevant named participants that appear in the evidence.\n- Include temporal qualifiers whenever they are available.\n- Mention counts when they are directly supported and meaningful. Prefer direct factual phrasing over meta phrasing.\n- When the durable fact is the content of what was said, state the content directly instead of describing that it was said.\n- Use communication verbs only when the act of speaking, asking, sharing, presenting, announcing, or telling is itself the important fact.\n- NEVER manufacture pattern language from a single occurrence. A single mention can support a fact, but not a trend, habit, or preference unless the text states that directly.\n- If the evidence is insufficient or ambiguous, omit the claim.\n- NEVER mention the source material or summarization process.\n- NEVER mention episodes, messages, prompts, summaries, memory, graphs, nodes, labels, node types, ontology, schema, or categorization.\n- NEVER output phrases like \"the summary\", \"the entity\", \"categorized as\", \"tagged as\", \"suggests\", \"implies\", \"appears to\", or \"recorded interaction\".\n- NEVER use \"the entity\" as a pronoun. Use the entity's actual name or a natural pronoun (he, she, it, they).\n- NEVER use meta-language verbs like \"mentioned\", \"described\", \"stated\", \"noted\", \"discussed\", \"referenced\", \"indicated\", or \"reported\". State the fact directly instead of describing how it was communicated.\n- NEVER begin the summary with \"A \", \"An \", or \"This is\". If the entity's name starts with \"The\" (e.g. \"The Washington Post\"), that is acceptable; otherwise NEVER lead with \"The \". Lead with the entity's name or a concrete fact.\n- When newer episode text conflicts with older summary content, prefer the newer explicit fact.\n- If the new episodes add no durable fact, return the existing summary unchanged.\n- The summary should read like a compact brief, not a tagline.\n- Write 2-6 dense sentences in third person.\n- Return only the summary text.\n\n<EXAMPLES>\nInput: {\"name\": \"Jordan Lee\", \"existing_summary\": \"Jordan Lee works at Belmont Arts Center.\", \"episodes\": [{\"content\": \"Mina: Jordan Lee presented a ceramics workshop at Belmont Arts Center on March 3, 2025. The workshop had 24 attendees and focused on wheel-thrown bowls.\\nOwen: After the session, Jordan announced a second April workshop for returning students.\"}, {\"content\": \"Mina: Jordan shared that the new kiln room opened last month and that Jordan now supervises two studio assistants.\\nOwen: Jordan still teaches beginner ceramics on Wednesday evenings.\"}]}\nGOOD: \"Jordan Lee works at Belmont Arts Center. Jordan presented a ceramics workshop there on March 3, 2025 for 24 attendees focused on wheel-thrown bowls, and later announced a second April workshop for returning students. Jordan supervises two studio assistants, teaches beginner ceramics on Wednesday evenings, and works out of the new kiln room that opened the previous month.\"\nBAD: \"Jordan Lee seems interested in ceramics. Jordan mentioned teaching and was described as busy at the arts center.\"\n</EXAMPLES>"
+   },
+   {
+    "role": "user",
+    "content": "NEVER include meta-language about the summarization process. Use ONLY facts from the provided EPISODES.\nEach summary must be under 1000 characters. Write 2-6 dense sentences in third person. Preserve all material names, roles, dates, counts, and changes over time that are explicitly supported.\n\nFor each entity below, generate an updated summary using ONLY the provided EPISODES and any existing summary already on the entity.\n\n<EPISODES>\n[{\"content\": \"Mina: The kiln room opened last month.\", \"timestamp\": \"2026-07-01T09:30:00+00:00\"}, {\"content\": \"Owen: Jordan još vodi radionicu — 陶芸クラス.\", \"timestamp\": null}]\n\"Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\"\n</EPISODES>\n\n<ENTITIES>\n[{\"name\": \"Jordan Lee\", \"summary\": \"Jordan Lee works at Belmont Arts Center.\", \"entity_types\": [\"Person\"], \"attributes\": {}}, {\"name\": \"Belmont Arts Center\", \"summary\": \"\", \"entity_types\": [\"Entity\"], \"attributes\": {}}]\n</ENTITIES>\n\nOnly return summaries for entities that have meaningful information to summarize.\nIf an entity has no relevant information in the episodes and no existing summary, you may skip it.\n"
+   }
+  ]
+ },
+ {
+  "function": "extract_entity_summaries_from_episodes",
+  "case": "with_type_descriptions",
+  "context": {
+   "previous_episodes": [
+    {
+     "content": "Mina: The kiln room opened last month.",
+     "timestamp": "2026-07-01T09:30:00+00:00"
+    },
+    {
+     "content": "Owen: Jordan još vodi radionicu — 陶芸クラス.",
+     "timestamp": null
+    }
+   ],
+   "episode_content": "Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.",
+   "entities": [
+    {
+     "name": "Jordan Lee",
+     "summary": "Jordan Lee works at Belmont Arts Center.",
+     "entity_types": [
+      "Person"
+     ],
+     "attributes": {}
+    },
+    {
+     "name": "Belmont Arts Center",
+     "summary": "",
+     "entity_types": [
+      "Entity"
+     ],
+     "attributes": {}
+    }
+   ],
+   "entity_type_descriptions": {
+    "Person": "A human being mentioned by name.",
+    "Entity": "Default entity classification."
+   }
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "You maintain detailed, information-dense entity memories from episode text.\n\nUse ONLY facts explicitly stated in EPISODES and durable facts already present in EXISTING_SUMMARY.\nNEVER infer beyond what is directly supported.\n\nPrimary goal:\nWrite a dense factual summary of the entity that preserves as many supported details as possible while staying coherent and durable.\n\nWhen the input includes entity_type_descriptions, use them to decide which facts are most relevant to the entity type. NEVER mention the entity type, type description, or classification in the summary text itself.\n\nWhat to capture:\n- Stable facts about the entity\n- All materially relevant named people, organizations, places, events, documents, objects, and other entities linked to it\n- Explicit actions, roles, responsibilities, relationships, and outcomes\n- Counts, sequences, and repeated patterns when the evidence supports them\n- Temporal details at the highest fidelity available: dates, months, years, ordering, and changes over time\n- Current state over superseded state when newer episodes clearly update older information\n\nRules:\n- Be exhaustive within the evidence. Prefer retaining a supported concrete detail over omitting it for brevity.\n- NEVER infer preferences, habits, recurrence, frequency, causality, intent, importance, or category from a name, a single mention, or weak evidence.\n- Only describe something as recurring, preferred, typical, habitual, or ongoing when multiple episodes explicitly support that claim or one episode states it directly.\n- Include all materially relevant named participants that appear in the evidence.\n- Include temporal qualifiers whenever they are available.\n- Mention counts when they are directly supported and meaningful. Prefer direct factual phrasing over meta phrasing.\n- When the durable fact is the content of what was said, state the content directly instead of describing that it was said.\n- Use communication verbs only when the act of speaking, asking, sharing, presenting, announcing, or telling is itself the important fact.\n- NEVER manufacture pattern language from a single occurrence. A single mention can support a fact, but not a trend, habit, or preference unless the text states that directly.\n- If the evidence is insufficient or ambiguous, omit the claim.\n- NEVER mention the source material or summarization process.\n- NEVER mention episodes, messages, prompts, summaries, memory, graphs, nodes, labels, node types, ontology, schema, or categorization.\n- NEVER output phrases like \"the summary\", \"the entity\", \"categorized as\", \"tagged as\", \"suggests\", \"implies\", \"appears to\", or \"recorded interaction\".\n- NEVER use \"the entity\" as a pronoun. Use the entity's actual name or a natural pronoun (he, she, it, they).\n- NEVER use meta-language verbs like \"mentioned\", \"described\", \"stated\", \"noted\", \"discussed\", \"referenced\", \"indicated\", or \"reported\". State the fact directly instead of describing how it was communicated.\n- NEVER begin the summary with \"A \", \"An \", or \"This is\". If the entity's name starts with \"The\" (e.g. \"The Washington Post\"), that is acceptable; otherwise NEVER lead with \"The \". Lead with the entity's name or a concrete fact.\n- When newer episode text conflicts with older summary content, prefer the newer explicit fact.\n- If the new episodes add no durable fact, return the existing summary unchanged.\n- The summary should read like a compact brief, not a tagline.\n- Write 2-6 dense sentences in third person.\n- Return only the summary text.\n\n<EXAMPLES>\nInput: {\"name\": \"Jordan Lee\", \"existing_summary\": \"Jordan Lee works at Belmont Arts Center.\", \"episodes\": [{\"content\": \"Mina: Jordan Lee presented a ceramics workshop at Belmont Arts Center on March 3, 2025. The workshop had 24 attendees and focused on wheel-thrown bowls.\\nOwen: After the session, Jordan announced a second April workshop for returning students.\"}, {\"content\": \"Mina: Jordan shared that the new kiln room opened last month and that Jordan now supervises two studio assistants.\\nOwen: Jordan still teaches beginner ceramics on Wednesday evenings.\"}]}\nGOOD: \"Jordan Lee works at Belmont Arts Center. Jordan presented a ceramics workshop there on March 3, 2025 for 24 attendees focused on wheel-thrown bowls, and later announced a second April workshop for returning students. Jordan supervises two studio assistants, teaches beginner ceramics on Wednesday evenings, and works out of the new kiln room that opened the previous month.\"\nBAD: \"Jordan Lee seems interested in ceramics. Jordan mentioned teaching and was described as busy at the arts center.\"\n</EXAMPLES>"
+   },
+   {
+    "role": "user",
+    "content": "NEVER include meta-language about the summarization process. Use ONLY facts from the provided EPISODES.\nEach summary must be under 1000 characters. Write 2-6 dense sentences in third person. Preserve all material names, roles, dates, counts, and changes over time that are explicitly supported.\n\nFor each entity below, generate an updated summary using ONLY the provided EPISODES and any existing summary already on the entity.\n\n<EPISODES>\n[{\"content\": \"Mina: The kiln room opened last month.\", \"timestamp\": \"2026-07-01T09:30:00+00:00\"}, {\"content\": \"Owen: Jordan još vodi radionicu — 陶芸クラス.\", \"timestamp\": null}]\n\"Jordan: We just moved to Denver last month. My spouse started a new role at Lockheed Martin and I enrolled in a ceramics workshop at the Belmont Arts Center.\"\n</EPISODES>\n\n<ENTITY_TYPE_DESCRIPTIONS>\n{\"Person\": \"A human being mentioned by name.\", \"Entity\": \"Default entity classification.\"}\n</ENTITY_TYPE_DESCRIPTIONS>\nWhen an entity's type appears in ENTITY_TYPE_DESCRIPTIONS, use the description to decide which facts are most relevant to that entity type. NEVER mention the entity type, type description, or classification in the summary text itself.\n\n<ENTITIES>\n[{\"name\": \"Jordan Lee\", \"summary\": \"Jordan Lee works at Belmont Arts Center.\", \"entity_types\": [\"Person\"], \"attributes\": {}}, {\"name\": \"Belmont Arts Center\", \"summary\": \"\", \"entity_types\": [\"Entity\"], \"attributes\": {}}]\n</ENTITIES>\n\nOnly return summaries for entities that have meaningful information to summarize.\nIf an entity has no relevant information in the episodes and no existing summary, you may skip it.\n"
+   }
+  ]
+ }
+]
