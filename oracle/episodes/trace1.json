@@ -1,0 +1,49 @@
+{
+ "name": "trace1",
+ "group_id": "trace1",
+ "description": "Small multi-turn conversational scenario exercising the pipeline's judgment paths: entity overlap across episodes (Priya, Northwind Labs, Marco), a fact stated then contradicted (Priya's employer changes in ep-3, which should invalidate the ep-0 employment edge), dedup judgment (\"NYC\" in ep-1 vs \"New York City\" in ep-2; \"Priya\" vs \"Priya Raman\"), possessive qualification (\"Priya's dog Biscuit\"), and unicode content (ep-4).",
+ "episodes": [
+  {
+   "name": "ep-0",
+   "source": "message",
+   "source_description": "chat between friends",
+   "content": "Marco: How's the new gig treating you?\nPriya: I love it — I joined Northwind Labs in January as a data engineer. The commute from Queens is rough though.",
+   "reference_time": "2026-03-02T18:30:00+00:00"
+  },
+  {
+   "name": "ep-1",
+   "source": "message",
+   "source_description": "chat between friends",
+   "content": "Priya: Spent the weekend walking Biscuit around Prospect Park. My dog is obsessed with the long meadow.\nMarco: Ha! I was in NYC too, caught a Knicks game with my brother.",
+   "reference_time": "2026-03-09T14:05:00+00:00"
+  },
+  {
+   "name": "ep-2",
+   "source": "message",
+   "source_description": "chat between friends",
+   "content": "Marco: Any chance you're free Thursday? There's a data engineering meetup in New York City, at the Flatiron Building.\nPriya: Count me in. My teammate Sam Okafor from Northwind Labs is speaking there about stream processing.",
+   "reference_time": "2026-04-16T09:12:00+00:00"
+  },
+  {
+   "name": "ep-3",
+   "source": "message",
+   "source_description": "chat between friends",
+   "content": "Priya: Big news — I left Northwind Labs last Friday. I'm starting at Meridian Health next month as a senior data engineer.\nMarco: Congrats, Priya Raman, moving up in the world! Does Sam know?",
+   "reference_time": "2026-06-08T20:45:00+00:00"
+  },
+  {
+   "name": "ep-4",
+   "source": "message",
+   "source_description": "chat between friends",
+   "content": "Priya: Started Japanese classes to prep for the Meridian Health office opening in Tokyo — my teacher 佐藤さん says my pronunciation is decent.\nMarco: 頑張って! Biscuit can be your study buddy.",
+   "reference_time": "2026-07-01T17:00:00+00:00"
+  }
+ ],
+ "queries": [
+  "Where does Priya work?",
+  "Who is Sam Okafor?",
+  "What does Priya do on weekends?",
+  "Priya Northwind Labs",
+  "Who is learning Japanese?"
+ ]
+}

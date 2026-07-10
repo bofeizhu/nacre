@@ -65,9 +65,11 @@ increment. Conventions (binding for any agent working this file):
       RRF retrieval + recordings; `--replay` mode for offline determinism
       verification; cross-encoder is a fail-loud stub). Syntax-checked only —
       runtime verification happens at the first capture run.
-- [ ] Curated episode fixture set #1: a small multi-turn conversational
-      scenario with entity overlap, a fact that later gets contradicted, and
-      names that need dedup judgment. Committed under `oracle/episodes/`.
+- [x] Curated episode fixture set #1 → `oracle/episodes/trace1.json`:
+      5 episodes / 5 queries; employment fact contradicted (ep-0 → ep-3
+      invalidation), NYC vs New York City + Priya vs Priya Raman dedup,
+      possessive qualification (Priya's dog Biscuit), unicode (ep-4),
+      strictly increasing reference times.
 - [ ] BLOCKED(user: needs Docker running + an LLM API key for the one-time
       capture) First capture run → commit golden trace #1 + recordings.
 
