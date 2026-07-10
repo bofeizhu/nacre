@@ -71,7 +71,13 @@ def build_aliases(nodes, edges, episodes) -> dict[str, str]:
     for i, ep in enumerate(sorted(episodes, key=lambda e: (iso(e.valid_at) or '', e.name))):
         aliases[ep.uuid] = f'ep{i}'
     for i, edge in enumerate(
-        sorted(edges, key=lambda e: (e.fact, e.source_node_uuid, e.target_node_uuid))
+        sorted(
+            edges,
+            # Tiebreak by endpoint ALIASES, not raw uuids — aliases are
+            # content-derived, so the ordering is identical across runs and
+            # across the Python/Rust implementations.
+            key=lambda e: (e.fact, aliases[e.source_node_uuid], aliases[e.target_node_uuid]),
+        )
     ):
         aliases[edge.uuid] = f'e{i}'
     return aliases

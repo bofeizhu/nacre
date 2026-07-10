@@ -147,10 +147,14 @@ increment. Conventions (binding for any agent working this file):
       conformance target (score parity impossible by construction). Advanced
       recipes (MMR, node-distance, cross-encoder, communities) deliberately
       not ported per AGENTS.md.
-- [ ] Conformance harness: `tests/conformance.rs` loading `oracle/` fixtures,
-      diffing graph state field-for-field and retrieval by rank.
-      BLOCKED(until golden trace #1 exists) for the assertion half; the
-      loader + differ can land first.
+- [x] Conformance harness: `tests/conformance.rs` — grit-side aliased state
+      dumper mirroring capture.py (content-derived aliases; capture.py's
+      edge-sort tiebreak fixed to use aliases so ordering is portable),
+      recursive field-for-field differ with created_at excluded, retrieval
+      rank comparison, and the full trace-replay test body (episode window 3,
+      per-episode reference-time clock). Skips loudly until golden trace #1
+      exists; the differ is exercised by an offline self-test. Expect
+      first-contact shakeout when the trace lands.
 - [ ] Real Claude API `LanguageModel` client behind a `claude` feature flag
       (off by default; manual integration test only — never in `cargo test`).
 
