@@ -14,6 +14,7 @@
 
 #![deny(unsafe_code)]
 
+pub mod extract;
 pub mod model;
 pub mod prompts;
 pub mod schemas;

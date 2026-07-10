@@ -75,9 +75,15 @@ increment. Conventions (binding for any agent working this file):
 
 ## Milestone 3 — the pipeline port (each step: logic + replay tests green)
 
-- [ ] `extract/nodes.rs`: episode → extracted entity nodes (ports
-      `node_operations.py` extraction path). Replay tests w/ synthetic
-      recordings until golden traces exist.
+- [x] `extract/nodes.rs`: episode → extracted entity nodes (ports
+      `node_operations.py` extraction path: context construction incl.
+      multi-episode attribution, prompt routing by source, empty-name filter,
+      type mapping + exclusion, index clamping, exact-duplicate collapse with
+      specificity rules; plus `concatenate_episodes` and
+      `_normalize_string_exact`). `extract/mod.rs` defines the pipeline input
+      types (EpisodeInput with ISO-string timestamps for prompt fidelity;
+      DraftNode with positional identity — grit assigns durable ids at
+      apply time). Replay tests w/ synthetic recordings.
 - [ ] `dedupe/nodes.rs`: candidate resolution using grit's
       `find_merge_candidates` + LLM judgment → `MergeNodes` ops (ports
       `dedup_helpers.py` + `node_operations.py` dedup path).
