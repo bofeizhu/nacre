@@ -17,13 +17,14 @@
 //! Known gaps, pending a grit op-vocabulary decision (see ROADMAP.md):
 //! summary refresh and label promotion have no update op to persist
 //! through — updated summaries are returned to the caller instead.
-//! Candidate gathering also approximates upstream: node candidates come
-//! from grit's `find_merge_candidates`, edge invalidation candidates from
-//! 1-hop traversal around the endpoints (upstream uses hybrid search).
-//! Golden-trace conformance decides whether these matter.
+//! Candidate gathering is engine-free on both sides of the oracle (the
+//! capture harness patches upstream identically — see DEVIATIONS.md):
+//! node dedup candidates come from pinned-arithmetic cosine ranking of the
+//! group's pre-episode nodes; edge dedup/invalidation pools are the
+//! group's pre-episode edges, split same-pair vs rest and sorted by fact.
 
 use chrono::{DateTime, Utc};
-use grit_core::{GraphOp, Grit, Traversal};
+use grit_core::{GraphOp, Grit};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -31,7 +32,7 @@ use crate::dedupe::{self, EpisodeRef, ExistingEdge, ExistingNode};
 use crate::extract::edges::{ExtractEdgesOptions, parse_llm_timestamp};
 use crate::extract::nodes::ExtractNodesOptions;
 use crate::extract::{self, EpisodeInput, NodeRef};
-use crate::model::{LanguageModel, ModelError};
+use crate::model::{Embedder, LanguageModel, ModelError};
 
 /// Upstream's candidate-pool bound.
 // ports: node_operations.py::NODE_DEDUP_CANDIDATE_LIMIT
@@ -88,10 +89,15 @@ fn labels_of(node: &grit_core::Node) -> Vec<String> {
 }
 
 fn existing_node_from(node: &grit_core::Node) -> ExistingNode {
-    let attributes = match &node.attrs {
+    let mut attributes = match &node.attrs {
         serde_json::Value::Object(map) => map.clone(),
         _ => serde_json::Map::new(),
     };
+    // "labels" is nacre's storage convention inside grit attrs, not a
+    // Graphiti node attribute — upstream candidates hydrated via
+    // get_by_group_ids carry no labels key, and the dedupe context spreads
+    // attributes verbatim into the prompt.
+    attributes.remove("labels");
     ExistingNode {
         id: node.id.to_string(),
         name: node.name.clone(),
@@ -119,13 +125,78 @@ fn existing_edge_from(edge: &grit_core::Edge) -> ExistingEdge {
     }
 }
 
+/// Snapshot every node in a group from grit's export stream (see
+/// [`group_edges_snapshot`] for why export is the enumeration path).
+fn group_nodes_snapshot(
+    grit: &Grit,
+    group_id: &str,
+) -> Result<Vec<grit_core::Node>, PipelineError> {
+    let mut buffer: Vec<u8> = Vec::new();
+    grit.export_jsonl(&mut buffer)?;
+    let export = String::from_utf8(buffer).expect("export is UTF-8");
+    let mut nodes: Vec<grit_core::Node> = Vec::new();
+    for line in export.lines() {
+        let value: serde_json::Value = serde_json::from_str(line).expect("export line is JSON");
+        if value["t"] == "node" {
+            let node: grit_core::Node =
+                serde_json::from_value(value).expect("node record round-trips");
+            if node.group_id == group_id {
+                nodes.push(node);
+            }
+        }
+    }
+    Ok(nodes)
+}
+
+/// Snapshot every edge in a group from grit's export stream. grit exposes
+/// getters by id only, so the JSONL export is the enumeration path — fine
+/// within nacre's scale envelope; revisit if grit grows a group-scan API.
+fn group_edges_snapshot(
+    grit: &Grit,
+    group_id: &str,
+) -> Result<Vec<grit_core::Edge>, PipelineError> {
+    let mut buffer: Vec<u8> = Vec::new();
+    grit.export_jsonl(&mut buffer)?;
+    let export = String::from_utf8(buffer).expect("export is UTF-8");
+    let mut edges: Vec<grit_core::Edge> = Vec::new();
+    for line in export.lines() {
+        let value: serde_json::Value = serde_json::from_str(line).expect("export line is JSON");
+        if value["t"] == "edge" {
+            let edge: grit_core::Edge =
+                serde_json::from_value(value).expect("edge record round-trips");
+            if edge.group_id == group_id {
+                edges.push(edge);
+            }
+        }
+    }
+    Ok(edges)
+}
+
+/// Cosine similarity with pinned arithmetic: components are f32 (both
+/// sides of the oracle store vectors at f32), accumulation is sequential
+/// f64 — byte-identical to the capture harness's Python loop, so scores
+/// (and therefore candidate ranking) agree exactly across the oracle.
+fn cosine_f64(a: &[f32], b: &[f32]) -> f64 {
+    let mut dot = 0.0f64;
+    let mut na = 0.0f64;
+    let mut nb = 0.0f64;
+    for (x, y) in a.iter().zip(b) {
+        let (x, y) = (f64::from(*x), f64::from(*y));
+        dot += x * y;
+        na += x * x;
+        nb += y * y;
+    }
+    dot / (na.sqrt() * nb.sqrt())
+}
+
 /// Ingest one episode: extract nodes, dedup against the graph, extract and
 /// resolve edges, apply the resulting ops, and record the episode with its
 /// mentions. `now` is injected (grit's clock stays authoritative for
 /// system-time columns it stamps itself).
-pub async fn add_episode<M: LanguageModel>(
+pub async fn add_episode<M: LanguageModel, E: Embedder>(
     grit: &Grit,
     model: &M,
+    embedder: &E,
     episode: &EpisodeInput,
     previous_episodes: &[EpisodeInput],
     options: &AddEpisodeOptions,
@@ -138,10 +209,56 @@ pub async fn add_episode<M: LanguageModel>(
         extract::nodes::extract_nodes(model, episodes, previous_episodes, &options.extract_nodes)
             .await?;
 
-    // 2. Persist drafts, then gather dedup candidates from grit. Drafts
-    //    added in this batch are excluded from each other's pools (upstream
-    //    dedups extractions against the EXISTING graph; within-batch dups
-    //    were already collapsed at extraction).
+    // Snapshot the group's nodes BEFORE persisting this episode's drafts:
+    // upstream dedups extractions against the existing graph only
+    // (within-batch dups were already collapsed at extraction).
+    let group_nodes = group_nodes_snapshot(grit, &episode.group_id)?;
+
+    // 2. Per-draft dedup candidates, mirroring upstream's
+    //    `_semantic_candidate_search` as patched by the oracle harness
+    //    (engine-free — see DEVIATIONS.md "Node dedup candidate search"):
+    //    embed the draft names and every distinct existing name (sorted, so
+    //    both sides issue identical embedder requests), then rank existing
+    //    nodes by pinned f64 cosine, strict `score > min`, limit 15.
+    let mut candidate_pools: Vec<Vec<ExistingNode>> = vec![Vec::new(); drafts.len()];
+    if !drafts.is_empty() {
+        let queries: Vec<String> = drafts.iter().map(|d| d.name.replace('\n', " ")).collect();
+        let query_vectors = embedder.embed(&queries).await?;
+        if !group_nodes.is_empty() {
+            let names: Vec<String> = group_nodes
+                .iter()
+                .map(|n| n.name.clone())
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            let name_vectors: std::collections::HashMap<&str, Vec<f32>> = names
+                .iter()
+                .map(String::as_str)
+                .zip(embedder.embed(&names).await?)
+                .collect();
+            for (pool, query_vector) in candidate_pools.iter_mut().zip(&query_vectors) {
+                let mut scored: Vec<(f64, String, &grit_core::Node)> = group_nodes
+                    .iter()
+                    .filter_map(|n| {
+                        let score = cosine_f64(query_vector, &name_vectors[n.name.as_str()]);
+                        (score > NODE_DEDUP_MIN_SCORE).then(|| (score, n.id.to_string(), n))
+                    })
+                    .collect();
+                scored.sort_by(|a, b| {
+                    b.0.partial_cmp(&a.0)
+                        .expect("cosine is finite")
+                        .then_with(|| a.1.cmp(&b.1))
+                });
+                *pool = scored
+                    .into_iter()
+                    .take(NODE_DEDUP_CANDIDATE_LIMIT)
+                    .map(|(_, _, n)| existing_node_from(n))
+                    .collect();
+            }
+        }
+    }
+
+    // Persist the drafts now that candidates are pinned.
     let mut draft_ids: Vec<Uuid> = Vec::with_capacity(drafts.len());
     for draft in &drafts {
         let id = grit.new_id();
@@ -160,18 +277,6 @@ pub async fn add_episode<M: LanguageModel>(
             group_id: draft.group_id.clone(),
         })?;
         draft_ids.push(id);
-    }
-
-    let mut candidate_pools: Vec<Vec<ExistingNode>> = Vec::with_capacity(drafts.len());
-    for &id in &draft_ids {
-        let pool: Vec<ExistingNode> = grit
-            .find_merge_candidates(id, NODE_DEDUP_MIN_SCORE)?
-            .into_iter()
-            .filter(|candidate| !draft_ids.contains(&candidate.node.id))
-            .take(NODE_DEDUP_CANDIDATE_LIMIT)
-            .map(|candidate| existing_node_from(&candidate.node))
-            .collect();
-        candidate_pools.push(pool);
     }
 
     // 3. Dedup judgment; duplicates fold into their existing node.
@@ -235,21 +340,23 @@ pub async fn add_episode<M: LanguageModel>(
     let mut invalidated_edge_ids: Vec<Uuid> = Vec::new();
     let mut mentioned_edges: Vec<Uuid> = Vec::new();
 
+    // Snapshot the group's edges once, before any of this episode's edge
+    // ops: upstream resolves every extracted edge against the pre-episode
+    // graph (it bulk-saves the batch only after resolving all of it), so
+    // edges added earlier in this same episode are NOT candidates. Same-pair
+    // edges are dedup candidates ("related", upstream's get_between_nodes);
+    // the rest of the group is the invalidation pool (engine-free stand-in
+    // for upstream's relevance-truncated hybrid search — see DEVIATIONS.md
+    // "Edge dedup/invalidation candidate pools").
+    let group_edges = group_edges_snapshot(grit, &episode.group_id)?;
+
     for draft_edge in &draft_edges {
         let src: Uuid = draft_edge.source_id.parse().expect("grit ids round-trip");
         let dst: Uuid = draft_edge.target_id.parse().expect("grit ids round-trip");
 
-        // Candidates from a 1-hop neighborhood of both endpoints:
-        // same-endpoint edges are dedup candidates ("related"), the rest of
-        // the neighborhood is the invalidation pool.
-        let neighborhood = grit.traverse(&[src, dst], &Traversal::default().depth(1))?;
         let mut related: Vec<ExistingEdge> = Vec::new();
         let mut invalidation_pool: Vec<ExistingEdge> = Vec::new();
-        for edge in &neighborhood.edges {
-            if new_edge_ids.contains(&edge.id) {
-                // Edges added earlier in this same run stay eligible, like
-                // upstream's within-episode dedup.
-            }
+        for edge in &group_edges {
             let mut existing = existing_edge_from(edge);
             existing.episodes = grit
                 .mentions_of(edge.id)?
@@ -264,6 +371,15 @@ pub async fn add_episode<M: LanguageModel>(
                 invalidation_pool.push(existing);
             }
         }
+
+        // ORACLE DEVIATION (DEVIATIONS.md): prompt-facing candidate lists
+        // are sorted by fact text. Upstream's order is whatever FalkorDB
+        // returns, which is not deterministic across processes — the oracle
+        // capture harness applies this same sort (capture.py), making the
+        // order well-defined on both sides. UTF-8 byte order equals unicode
+        // code-point order, so Rust string sort matches Python's.
+        related.sort_by(|a, b| (&a.fact, &a.id).cmp(&(&b.fact, &b.id)));
+        invalidation_pool.sort_by(|a, b| (&a.fact, &a.id).cmp(&(&b.fact, &b.id)));
 
         let resolution = dedupe::edges::resolve_extracted_edge(
             model,
@@ -347,7 +463,9 @@ pub async fn add_episode<M: LanguageModel>(
 mod tests {
     use super::*;
     use crate::extract::{EntityTypeSpec, EpisodeSource};
-    use crate::model::{CompletionRequest, ModelSize, Recording, RecordingStore, ReplayModel};
+    use crate::model::{
+        CompletionRequest, EmbedderMeta, ModelSize, Recording, RecordingStore, ReplayModel,
+    };
     use crate::schemas::ResponseSchema;
     use chrono::TimeZone;
     use grit_core::Options;
@@ -355,6 +473,39 @@ mod tests {
 
     fn now() -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 7, 10, 12, 0, 0).unwrap()
+    }
+
+    /// Deterministic offline embedder: same string, same vector. Exact
+    /// values are irrelevant here — the flow assertions ride on the
+    /// exact-name fast path, not on cosine ranking.
+    struct HashEmbedder;
+
+    impl Embedder for HashEmbedder {
+        fn meta(&self) -> EmbedderMeta {
+            EmbedderMeta {
+                model_id: "hash-test".into(),
+                dim: 3,
+                model_version: String::new(),
+            }
+        }
+
+        async fn embed(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>, ModelError> {
+            Ok(inputs
+                .iter()
+                .map(|s| {
+                    let mut h: u64 = 1469598103934665603;
+                    for b in s.bytes() {
+                        h ^= u64::from(b);
+                        h = h.wrapping_mul(1099511628211);
+                    }
+                    vec![
+                        (h % 97) as f32 + 1.0,
+                        (h / 97 % 89) as f32 + 1.0,
+                        (h / 8633 % 83) as f32 + 1.0,
+                    ]
+                })
+                .collect())
+        }
     }
 
     fn episode(name: &str, content: &str, valid_at: &str) -> EpisodeInput {
@@ -514,7 +665,7 @@ mod tests {
                 ep1_edge_response,
             ),
         ]));
-        let out1 = add_episode(&grit, &model, &ep1, &[], &opts, now())
+        let out1 = add_episode(&grit, &model, &HashEmbedder, &ep1, &[], &opts, now())
             .await
             .unwrap();
         assert_eq!(out1.node_ids.len(), 2);
@@ -581,7 +732,7 @@ mod tests {
                 json!({"duplicate_facts": [], "contradicted_facts": [0]}),
             ),
         ]));
-        let out2 = add_episode(&grit, &model, &ep2, &previous, &opts, now())
+        let out2 = add_episode(&grit, &model, &HashEmbedder, &ep2, &previous, &opts, now())
             .await
             .unwrap();
 

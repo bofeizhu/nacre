@@ -44,7 +44,7 @@
   "messages": [
    {
     "role": "system",
-    "content": "You are an entity deduplication assistant. NEVER fabricate entity names or mark distinct entities as duplicates."
+    "content": "You are an entity deduplication assistant. NEVER fabricate entity names or mark distinct entities as duplicates.\nDo not escape unicode characters.\n"
    },
    {
     "role": "user",
@@ -112,7 +112,7 @@
   "messages": [
    {
     "role": "system",
-    "content": "You are an entity deduplication assistant. NEVER fabricate entity names or mark distinct entities as duplicates."
+    "content": "You are an entity deduplication assistant. NEVER fabricate entity names or mark distinct entities as duplicates.\nDo not escape unicode characters.\n"
    },
    {
     "role": "user",
@@ -140,7 +140,7 @@
   "messages": [
    {
     "role": "system",
-    "content": "You are an entity deduplication assistant that groups duplicate nodes by UUID."
+    "content": "You are an entity deduplication assistant that groups duplicate nodes by UUID.\nDo not escape unicode characters.\n"
    },
    {
     "role": "user",

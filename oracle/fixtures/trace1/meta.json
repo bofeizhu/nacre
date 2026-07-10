@@ -1,0 +1,7 @@
+{
+ "embedder_exchanges": 30,
+ "graphiti_core": "0.29.2",
+ "llm_exchanges": 33,
+ "note": "record FalkorDB image digest + capture date here at capture time",
+ "trace": "trace1"
+}

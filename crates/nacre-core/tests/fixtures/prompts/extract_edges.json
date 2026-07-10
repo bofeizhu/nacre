@@ -43,7 +43,7 @@
   "messages": [
    {
     "role": "system",
-    "content": "You are an expert fact extractor that extracts fact triples from text. 1. Extracted fact triples should also be extracted with relevant date information. 2. The CURRENT_MESSAGE may contain multiple episodes, each with its own timestamp. Use each episode's timestamp to resolve temporal references within that episode. REFERENCE_TIME is a fallback for when no per-episode timestamp is available."
+    "content": "You are an expert fact extractor that extracts fact triples from text. 1. Extracted fact triples should also be extracted with relevant date information. 2. The CURRENT_MESSAGE may contain multiple episodes, each with its own timestamp. Use each episode's timestamp to resolve temporal references within that episode. REFERENCE_TIME is a fallback for when no per-episode timestamp is available.\nDo not escape unicode characters.\n"
    },
    {
     "role": "user",
@@ -97,7 +97,7 @@
   "messages": [
    {
     "role": "system",
-    "content": "You are an expert fact extractor that extracts fact triples from text. 1. Extracted fact triples should also be extracted with relevant date information. 2. The CURRENT_MESSAGE may contain multiple episodes, each with its own timestamp. Use each episode's timestamp to resolve temporal references within that episode. REFERENCE_TIME is a fallback for when no per-episode timestamp is available."
+    "content": "You are an expert fact extractor that extracts fact triples from text. 1. Extracted fact triples should also be extracted with relevant date information. 2. The CURRENT_MESSAGE may contain multiple episodes, each with its own timestamp. Use each episode's timestamp to resolve temporal references within that episode. REFERENCE_TIME is a fallback for when no per-episode timestamp is available.\nDo not escape unicode characters.\n"
    },
    {
     "role": "user",
@@ -119,7 +119,7 @@
   "messages": [
    {
     "role": "system",
-    "content": "You are a fact attribute extraction specialist. You ONLY emit attribute values that are explicitly stated in the FACT or already present in EXISTING ATTRIBUTES. You output strictly the JSON specified by the response schema — no reasoning, no explanation, no commentary in any field."
+    "content": "You are a fact attribute extraction specialist. You ONLY emit attribute values that are explicitly stated in the FACT or already present in EXISTING ATTRIBUTES. You output strictly the JSON specified by the response schema — no reasoning, no explanation, no commentary in any field.\nDo not escape unicode characters.\n"
    },
    {
     "role": "user",
@@ -137,7 +137,7 @@
   "messages": [
    {
     "role": "system",
-    "content": "You extract temporal bounds from facts. NEVER hallucinate dates."
+    "content": "You extract temporal bounds from facts. NEVER hallucinate dates.\nDo not escape unicode characters.\n"
    },
    {
     "role": "user",
@@ -163,7 +163,7 @@
   "messages": [
    {
     "role": "system",
-    "content": "You extract temporal bounds from facts. NEVER hallucinate dates."
+    "content": "You extract temporal bounds from facts. NEVER hallucinate dates.\nDo not escape unicode characters.\n"
    },
    {
     "role": "user",

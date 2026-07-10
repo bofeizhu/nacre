@@ -24,7 +24,7 @@
   "messages": [
    {
     "role": "system",
-    "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates."
+    "content": "You are a fact deduplication assistant. NEVER mark facts with key differences as duplicates.\nDo not escape unicode characters.\n"
    },
    {
     "role": "user",

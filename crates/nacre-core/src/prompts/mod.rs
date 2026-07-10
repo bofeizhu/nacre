@@ -29,8 +29,14 @@ use crate::model::{Message, Role};
 pub const MAX_SUMMARY_CHARS: usize = 1000;
 
 pub(crate) fn msg(role: Role, content: impl Into<String>) -> Message {
-    Message {
-        role,
-        content: content.into(),
+    let mut content = content.into();
+    // ports: prompts/lib.py::VersionWrapper.__call__ — the prompt library
+    // appends this suffix to every SYSTEM message at render time, so every
+    // production prompt carries it. Discovered via golden trace #1: the
+    // fixture generator originally called prompt functions directly and
+    // missed the wrapper (it now applies it too).
+    if role == Role::System {
+        content.push_str(helpers::DO_NOT_ESCAPE_UNICODE);
     }
+    Message { role, content }
 }

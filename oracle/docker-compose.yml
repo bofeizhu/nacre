@@ -1,10 +1,9 @@
 # FalkorDB for golden-trace capture runs (manual, local only).
 #
-# NOTE: pin the image digest at the first successful capture — the actual
-# server version is recorded into each trace's meta.json, and traces must
-# state exactly what produced them.
+# Digest pinned at the first successful trace1 capture (2026-07-10,
+# redis_version 8.6.3). Re-pin deliberately, together with a re-capture.
 services:
   falkordb:
-    image: falkordb/falkordb:latest
+    image: falkordb/falkordb@sha256:2496643cabd67e87fd82458383400c049324daec1fe674ba0db4c5bdaca5d25f
     ports:
-      - "6379:6379"
+      - "6380:6379"  # host 6380: another project's Redis owns 6379

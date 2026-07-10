@@ -12,6 +12,7 @@ are rendered from the actual upstream Python by
 
 | Prompt (upstream path) | Ported to | Deviation | Reason |
 |---|---|---|---|
+| `prompts/lib.py::VersionWrapper.__call__` (appends `DO_NOT_ESCAPE_UNICODE` to every SYSTEM message at render time) | `src/prompts/mod.rs::msg` | none | Caught by golden trace #1: every upstream call site goes through `prompt_library`, so the suffix is part of every production prompt. The fixture generator originally bypassed the wrapper and shared the port's blind spot; it now applies the same mutation. |
 | `prompts/prompt_helpers.py::to_prompt_json` + `DO_NOT_ESCAPE_UNICODE` | `src/prompts/helpers.rs` | none | |
 | `prompts/snippets.py::summary_instructions` | `src/prompts/snippets.rs` | none | |
 | `utils/text_utils.py::MAX_SUMMARY_CHARS` | `src/prompts/mod.rs` | none | |

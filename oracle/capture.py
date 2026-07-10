@@ -35,6 +35,15 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+# Graphiti bulk-saves nodes/edges concurrently (semaphore_gather); FalkorDB
+# insertion order then varies run-to-run, which changes internal-id tie-break
+# order in fulltext/vector search — and therefore the ORDER of candidate lists
+# embedded in prompts. Serializing everything makes capture and replay execute
+# the identical sequence, which is what makes traces byte-deterministic.
+# Must be set before graphiti_core imports (read at import time).
+os.environ['SEMAPHORE_LIMIT'] = '1'
+
 from graphiti_core import Graphiti
 from graphiti_core.driver.falkordb_driver import FalkorDriver
 from graphiti_core.edges import EntityEdge
@@ -44,6 +53,104 @@ from graphiti_core.llm_client.openai_client import OpenAIClient
 from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
+import graphiti_core.utils.maintenance.edge_operations as _edge_ops
+
+# ORACLE DEVIATION (see DEVIATIONS.md "Edge dedup/invalidation candidate
+# pools"): upstream builds the EXISTING FACTS / FACT INVALIDATION CANDIDATES
+# prompt lists from a FalkorDB hybrid search — engine-internal result order
+# (collect() ignores ORDER BY) and top-10 relevance truncation are both
+# engine-ranking behavior that neither a rerun of this harness nor any other
+# storage engine can reproduce. Replace the edge-resolution search with an
+# engine-free equivalent: ALL saved group edges, restricted to the caller's
+# edge_uuids filter when present (that filter carries the same-endpoint-pair
+# edges, so the related/invalidation split is preserved), sorted by fact
+# text. nacre builds its pools identically.
+
+
+async def _deterministic_edge_search(clients, query, group_ids, config=None,
+                                     search_filter=None, *args, **kwargs):
+    from graphiti_core.search.search_config import SearchResults
+
+    group_id = group_ids[0]
+    dump_driver = clients.driver.clone(database=group_id)
+    try:
+        edges = await EntityEdge.get_by_group_ids(dump_driver, [group_id])
+    except Exception:  # raised when the group has no edges yet
+        edges = []
+    allowed = getattr(search_filter, 'edge_uuids', None) if search_filter is not None else None
+    if allowed is not None:
+        allowed_set = set(allowed)
+        edges = [e for e in edges if e.uuid in allowed_set]
+    edges.sort(key=lambda e: (e.fact, e.uuid))
+    return SearchResults(edges=edges)
+
+
+_edge_ops.search = _deterministic_edge_search
+
+# ORACLE DEVIATION (see DEVIATIONS.md "Node dedup candidate search"):
+# upstream ranks node dedup candidates with an in-engine vector search
+# (same nondeterminism class as the edge search above). Replace it with an
+# engine-free equivalent both sides of the oracle can compute bit-for-bit:
+# embed the extracted names and every distinct existing name (sorted, so
+# capture and nacre issue identical — recordable — embedder requests), then
+# rank by cosine over f32-truncated components with sequential f64
+# accumulation (IEEE-identical to nacre's cosine_f64), strict > min score,
+# limit 15. The uuid tie-break is per-run, but score ties require identical
+# names, which the exact-match fast path resolves before any prompt.
+import graphiti_core.utils.maintenance.node_operations as _node_ops
+import math as _math
+import struct as _struct
+
+
+def _f32(x: float) -> float:
+    return _struct.unpack('f', _struct.pack('f', x))[0]
+
+
+def _cosine_f64(a: list[float], b: list[float]) -> float:
+    dot = 0.0
+    na = 0.0
+    nb = 0.0
+    for x, y in zip(a, b, strict=True):
+        dot += x * y
+        na += x * x
+        nb += y * y
+    return dot / (_math.sqrt(na) * _math.sqrt(nb))
+
+
+async def _deterministic_node_candidates(clients, extracted_nodes):
+    if not extracted_nodes:
+        return []
+    group_id = extracted_nodes[0].group_id
+    dump_driver = clients.driver.clone(database=group_id)
+    try:
+        existing = await EntityNode.get_by_group_ids(dump_driver, [group_id])
+    except Exception:  # raised when the group has no nodes yet
+        existing = []
+    queries = [n.name.replace('\n', ' ') for n in extracted_nodes]
+    query_vectors = await clients.embedder.create_batch(queries)
+    if not existing:
+        return [[] for _ in extracted_nodes]
+    names = sorted({n.name for n in existing})
+    name_vectors = {
+        name: [_f32(x) for x in vec]
+        for name, vec in zip(names, await clients.embedder.create_batch(names), strict=True)
+    }
+    results = []
+    for query_vector in query_vectors:
+        qv = [_f32(x) for x in query_vector]
+        scored = []
+        for node in existing:
+            score = _cosine_f64(qv, name_vectors[node.name])
+            if score > _node_ops.NODE_DEDUP_COSINE_MIN_SCORE:
+                scored.append((score, node.uuid, node))
+        scored.sort(key=lambda t: (-t[0], t[1]))
+        results.append([n for _, _, n in scored[: _node_ops.NODE_DEDUP_CANDIDATE_LIMIT]])
+    return results
+
+
+_node_ops._semantic_candidate_search = _deterministic_node_candidates
+
+
 from recording_clients import (
     FailLoudCrossEncoder,
     RecordingEmbedder,
@@ -212,7 +319,11 @@ async def run(spec_path: Path, out_dir: Path, replay: bool) -> None:
         cross_encoder=FailLoudCrossEncoder(),
     )
 
+    # clear_data on the base driver only touches the default graph;
+    # FalkorDB shards one graph per group_id, so clear that too (a crashed
+    # or prior run would otherwise contaminate this capture's contexts).
     await clear_data(driver)
+    await clear_data(driver.clone(database=group_id))
     await graphiti.build_indices_and_constraints()
 
     for episode in spec['episodes']:
@@ -226,9 +337,11 @@ async def run(spec_path: Path, out_dir: Path, replay: bool) -> None:
         )
         print(f'  added {episode["name"]}')
 
-    nodes = await EntityNode.get_by_group_ids(driver, [group_id])
-    edges = await EntityEdge.get_by_group_ids(driver, [group_id])
-    episodes = await EpisodicNode.get_by_group_ids(driver, [group_id])
+    # FalkorDB shards one graph per group_id — clone the driver onto it.
+    dump_driver = driver.clone(database=group_id)
+    nodes = await EntityNode.get_by_group_ids(dump_driver, [group_id])
+    edges = await EntityEdge.get_by_group_ids(dump_driver, [group_id])
+    episodes = await EpisodicNode.get_by_group_ids(dump_driver, [group_id])
     aliases = build_aliases(nodes, edges, episodes)
     graph_state = dump_graph_state(nodes, edges, episodes, aliases)
 
@@ -275,6 +388,55 @@ async def run(spec_path: Path, out_dir: Path, replay: bool) -> None:
             json.dumps(meta, ensure_ascii=False, indent=1, sort_keys=True) + '\n'
         )
     print(f'wrote trace to {out_dir}{" (replay outputs)" if replay else ""}')
+
+    if replay:
+        _replay_verdict(out_dir)
+
+
+def _normalize_state(obj):
+    """created_at/expired_at are wall-clock: drop / reduce to presence."""
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if k == 'created_at':
+                continue
+            if k == 'expired_at':
+                out[k] = v is not None
+            else:
+                out[k] = _normalize_state(v)
+        return out
+    if isinstance(obj, list):
+        return [_normalize_state(x) for x in obj]
+    return obj
+
+
+def _replay_verdict(out_dir: Path) -> None:
+    """Fail loudly unless the replay reproduced the captured graph state.
+
+    Retrieval is compared informationally only: FalkorDB's HNSW vector index
+    is nondeterministic across processes, so rank order (and top-k membership
+    at the tail) is not reproducible even by Graphiti itself. The oracle's
+    retrieval leg is therefore advisory — see DEVIATIONS.md.
+    """
+    captured = json.loads((out_dir / 'graph_state.json').read_text())
+    replayed = json.loads((out_dir / 'graph_state.replay.json').read_text())
+    if _normalize_state(captured) != _normalize_state(replayed):
+        raise SystemExit(
+            'REPLAY FAILED: graph state diverges from capture '
+            '(diff graph_state.json vs graph_state.replay.json)'
+        )
+    print('replay verdict: graph state DETERMINISTIC (modulo uuids/wall-clock)')
+    r_cap = json.loads((out_dir / 'retrieval.json').read_text())
+    r_rep = json.loads((out_dir / 'retrieval.replay.json').read_text())
+    for qc, qr in zip(r_cap, r_rep):
+        fc = [h['fact'] for h in qc['results']]
+        fr = [h['fact'] for h in qr['results']]
+        status = (
+            'rank-identical'
+            if fc == fr
+            else ('same set, rank differs' if sorted(fc) == sorted(fr) else 'SET DIFFERS')
+        )
+        print(f'  retrieval [{status}]: {qc["query"]}')
 
 
 def main() -> None:

@@ -325,6 +325,14 @@ def main() -> None:
             context = {k: v for k, v in case.items() if not k.startswith('_')}
             function = getattr(module, case['_function'])
             messages = function(context)
+            # Apply prompt_library's VersionWrapper mutation (prompts/lib.py):
+            # every SYSTEM message gets DO_NOT_ESCAPE_UNICODE appended at
+            # render time. All pipeline call sites go through the library,
+            # so the rendered form is the ground truth to pin.
+            helpers = importlib.import_module('graphiti_core.prompts.prompt_helpers')
+            for m in messages:
+                if m.role == 'system':
+                    m.content += helpers.DO_NOT_ESCAPE_UNICODE
             rendered.append(
                 {
                     'function': case['_function'],

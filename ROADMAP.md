@@ -70,8 +70,30 @@ increment. Conventions (binding for any agent working this file):
       invalidation), NYC vs New York City + Priya vs Priya Raman dedup,
       possessive qualification (Priya's dog Biscuit), unicode (ep-4),
       strictly increasing reference times.
-- [ ] BLOCKED(user: needs Docker running + an LLM API key for the one-time
-      capture) First capture run → commit golden trace #1 + recordings.
+- [x] First capture run → golden trace #1 + recordings committed
+      (2026-07-10, DeepSeek V4 LLM + Zhipu embedding-3, FalkorDB digest
+      pinned in docker-compose.yml). Getting the trace *deterministic*
+      surfaced four harness/port fixes, all landed: (1) `prompt_library`'s
+      `VersionWrapper` appends `DO_NOT_ESCAPE_UNICODE` to every system
+      message at render time — was missing from the Rust port AND the
+      fixture generator (both fixed, fixtures regenerated); (2) `clear_data`
+      only clears the default graph — the group's shard needed clearing too;
+      (3) LLM responses are now validated against the response model before
+      recording (DeepSeek occasionally echoes the schema in json_object
+      mode); (4) FalkorDB's search is nondeterministic across processes
+      (collect() ignores ORDER BY, HNSW random levels) — candidate pools for
+      node dedup and edge dedup/invalidation are now engine-free on both
+      sides of the oracle (see DEVIATIONS.md, three entries).
+      `capture.py --replay` verifies graph-state determinism and fails
+      loudly; retrieval fixtures are advisory (DEVIATIONS.md).
+- [ ] BLOCKED(user: grit op-vocabulary decision — SetNodeSummary/UpdateNode)
+      Conformance green for trace1. `cargo test --test conformance` now runs
+      end-to-end and is byte-exact through ep-0 and everywhere in ep-1
+      EXCEPT node summaries: upstream persists per-episode entity summaries
+      and they enter later dedupe prompts (`summary` field of EXISTING
+      ENTITIES), so nacre cannot conform without persisting summaries —
+      grit's AddNode upsert is lowest-HLC-wins and cannot update. This is
+      the concrete evidence the gated grit decision was waiting for.
 
 ## Milestone 3 — the pipeline port (each step: logic + replay tests green)
 

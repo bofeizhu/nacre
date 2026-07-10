@@ -1,0 +1,533 @@
+{
+ "edges": [
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:53.600997+00:00",
+   "episodes": [
+    "ep4"
+   ],
+   "expired_at": null,
+   "fact": "Biscuit is Priya Raman's dog.",
+   "invalid_at": null,
+   "name": "BELONGS_TO",
+   "source": "n0",
+   "target": "n8",
+   "uuid": "e0",
+   "valid_at": "2026-07-01T17:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:15.112282+00:00",
+   "episodes": [
+    "ep1"
+   ],
+   "expired_at": null,
+   "fact": "Marco caught a Knicks game with his brother",
+   "invalid_at": null,
+   "name": "ATTENDED",
+   "source": "n4",
+   "target": "n3",
+   "uuid": "e1",
+   "valid_at": "2026-03-09T14:05:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:15.112070+00:00",
+   "episodes": [
+    "ep1"
+   ],
+   "expired_at": null,
+   "fact": "Priya owns a dog named Biscuit",
+   "invalid_at": null,
+   "name": "OWNS",
+   "source": "n8",
+   "target": "n0",
+   "uuid": "e10",
+   "valid_at": "2026-03-09T14:05:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:15.112238+00:00",
+   "episodes": [
+    "ep1"
+   ],
+   "expired_at": null,
+   "fact": "Priya walked her dog Biscuit around Prospect Park",
+   "invalid_at": null,
+   "name": "WALKED_IN",
+   "source": "n8",
+   "target": "n9",
+   "uuid": "e11",
+   "valid_at": "2026-03-09T14:05:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:27.714450+00:00",
+   "episodes": [
+    "ep2"
+   ],
+   "expired_at": null,
+   "fact": "Priya will attend the data engineering meetup in New York City at the Flatiron Building on Thursday.",
+   "invalid_at": null,
+   "name": "WILL_ATTEND",
+   "source": "n8",
+   "target": "n13",
+   "uuid": "e12",
+   "valid_at": "2026-04-16T09:12:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:42.986403+00:00",
+   "episodes": [
+    "ep3"
+   ],
+   "expired_at": null,
+   "fact": "Priya will start at Meridian Health next month as a senior data engineer.",
+   "invalid_at": null,
+   "name": "WILL_WORK_AT",
+   "source": "n8",
+   "target": "n5",
+   "uuid": "e13",
+   "valid_at": "2026-07-01T00:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:27.714722+00:00",
+   "episodes": [
+    "ep2"
+   ],
+   "expired_at": "2026-07-10T10:16:45.526943+00:00",
+   "fact": "Sam Okafor is a teammate of Priya at Northwind Labs.",
+   "invalid_at": "2026-07-01T00:00:00+00:00",
+   "name": "WORKS_AT",
+   "source": "n11",
+   "target": "n7",
+   "uuid": "e14",
+   "valid_at": "2026-04-16T09:12:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:27.714754+00:00",
+   "episodes": [
+    "ep2"
+   ],
+   "expired_at": "2026-07-10T10:16:46.675049+00:00",
+   "fact": "Sam Okafor is speaking about stream processing at the data engineering meetup.",
+   "invalid_at": "2026-06-08T20:45:00+00:00",
+   "name": "TOPIC_OF_SPEECH",
+   "source": "n11",
+   "target": "n14",
+   "uuid": "e15",
+   "valid_at": "2026-04-16T09:12:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:27.714670+00:00",
+   "episodes": [
+    "ep2"
+   ],
+   "expired_at": "2026-07-10T10:16:46.675056+00:00",
+   "fact": "Sam Okafor is speaking at the data engineering meetup in New York City at the Flatiron Building.",
+   "invalid_at": "2026-06-08T20:45:00+00:00",
+   "name": "SPEAKING_AT",
+   "source": "n11",
+   "target": "n13",
+   "uuid": "e16",
+   "valid_at": "2026-04-16T09:12:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:27.714816+00:00",
+   "episodes": [
+    "ep2"
+   ],
+   "expired_at": null,
+   "fact": "The data engineering meetup takes place at the Flatiron Building.",
+   "invalid_at": null,
+   "name": "LOCATED_AT",
+   "source": "n13",
+   "target": "n1",
+   "uuid": "e17",
+   "valid_at": "2026-04-16T09:12:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:27.714785+00:00",
+   "episodes": [
+    "ep2"
+   ],
+   "expired_at": null,
+   "fact": "The data engineering meetup takes place in New York City.",
+   "invalid_at": null,
+   "name": "LOCATED_IN",
+   "source": "n13",
+   "target": "n6",
+   "uuid": "e18",
+   "valid_at": "2026-04-16T09:12:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:42.986456+00:00",
+   "episodes": [
+    "ep3"
+   ],
+   "expired_at": null,
+   "fact": "Marco congratulated Priya Raman on her new job.",
+   "invalid_at": null,
+   "name": "CONGRATULATED",
+   "source": "n4",
+   "target": "n8",
+   "uuid": "e2",
+   "valid_at": "2026-06-08T20:45:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:27.714621+00:00",
+   "episodes": [
+    "ep2"
+   ],
+   "expired_at": null,
+   "fact": "Marco invited Priya to the data engineering meetup in New York City at the Flatiron Building on Thursday.",
+   "invalid_at": null,
+   "name": "IS_INVITING",
+   "source": "n4",
+   "target": "n13",
+   "uuid": "e3",
+   "valid_at": "2026-04-16T09:12:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:53.600952+00:00",
+   "episodes": [
+    "ep4"
+   ],
+   "expired_at": null,
+   "fact": "Meridian Health is opening an office in Tokyo.",
+   "invalid_at": null,
+   "name": "HAS_OFFICE_IN",
+   "source": "n5",
+   "target": "n12",
+   "uuid": "e4",
+   "valid_at": "2026-07-01T17:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:53.600717+00:00",
+   "episodes": [
+    "ep4"
+   ],
+   "expired_at": null,
+   "fact": "Priya Raman started taking Japanese classes to prepare for the Meridian Health office opening in Tokyo.",
+   "invalid_at": null,
+   "name": "ATTENDS",
+   "source": "n8",
+   "target": "n2",
+   "uuid": "e5",
+   "valid_at": "2026-07-01T17:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:53.600899+00:00",
+   "episodes": [
+    "ep4"
+   ],
+   "expired_at": null,
+   "fact": "Priya Raman's Japanese teacher (佐藤さん) says her pronunciation is decent.",
+   "invalid_at": null,
+   "name": "TAUGHT_BY",
+   "source": "n8",
+   "target": "n15",
+   "uuid": "e6",
+   "valid_at": "2026-07-01T17:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:07.458817+00:00",
+   "episodes": [
+    "ep0"
+   ],
+   "expired_at": null,
+   "fact": "Priya commutes from Queens",
+   "invalid_at": null,
+   "name": "LIVES_IN",
+   "source": "n8",
+   "target": "n10",
+   "uuid": "e7",
+   "valid_at": "2026-03-02T18:30:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:07.458660+00:00",
+   "episodes": [
+    "ep0"
+   ],
+   "expired_at": "2026-07-10T10:16:45.526937+00:00",
+   "fact": "Priya joined Northwind Labs as a data engineer in January",
+   "invalid_at": "2026-07-01T00:00:00+00:00",
+   "name": "WORKS_AT",
+   "source": "n8",
+   "target": "n7",
+   "uuid": "e8",
+   "valid_at": "2026-01-01T00:00:00+00:00"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:42.986227+00:00",
+   "episodes": [
+    "ep3"
+   ],
+   "expired_at": "2026-07-10T10:16:44.669333+00:00",
+   "fact": "Priya left Northwind Labs last Friday.",
+   "invalid_at": "2026-06-05T00:00:00+00:00",
+   "name": "LEFT",
+   "source": "n8",
+   "target": "n7",
+   "uuid": "e9",
+   "valid_at": null
+  }
+ ],
+ "episodes": [
+  {
+   "content": "Marco: How's the new gig treating you?\nPriya: I love it — I joined Northwind Labs in January as a data engineer. The commute from Queens is rough though.",
+   "created_at": "2026-07-10T10:16:04.036250+00:00",
+   "entity_edges": [
+    "e7",
+    "e8"
+   ],
+   "name": "ep-0",
+   "source": "message",
+   "source_description": "chat between friends",
+   "uuid": "ep0",
+   "valid_at": "2026-03-02T18:30:00+00:00"
+  },
+  {
+   "content": "Priya: Spent the weekend walking Biscuit around Prospect Park. My dog is obsessed with the long meadow.\nMarco: Ha! I was in NYC too, caught a Knicks game with my brother.",
+   "created_at": "2026-07-10T10:16:09.319714+00:00",
+   "entity_edges": [
+    "e1",
+    "e10",
+    "e11"
+   ],
+   "name": "ep-1",
+   "source": "message",
+   "source_description": "chat between friends",
+   "uuid": "ep1",
+   "valid_at": "2026-03-09T14:05:00+00:00"
+  },
+  {
+   "content": "Marco: Any chance you're free Thursday? There's a data engineering meetup in New York City, at the Flatiron Building.\nPriya: Count me in. My teammate Sam Okafor from Northwind Labs is speaking there about stream processing.",
+   "created_at": "2026-07-10T10:16:18.902346+00:00",
+   "entity_edges": [
+    "e12",
+    "e14",
+    "e15",
+    "e16",
+    "e17",
+    "e18",
+    "e3"
+   ],
+   "name": "ep-2",
+   "source": "message",
+   "source_description": "chat between friends",
+   "uuid": "ep2",
+   "valid_at": "2026-04-16T09:12:00+00:00"
+  },
+  {
+   "content": "Priya: Big news — I left Northwind Labs last Friday. I'm starting at Meridian Health next month as a senior data engineer.\nMarco: Congrats, Priya Raman, moving up in the world! Does Sam know?",
+   "created_at": "2026-07-10T10:16:36.728666+00:00",
+   "entity_edges": [
+    "e13",
+    "e14",
+    "e14",
+    "e15",
+    "e16",
+    "e2",
+    "e8",
+    "e8",
+    "e9"
+   ],
+   "name": "ep-3",
+   "source": "message",
+   "source_description": "chat between friends",
+   "uuid": "ep3",
+   "valid_at": "2026-06-08T20:45:00+00:00"
+  },
+  {
+   "content": "Priya: Started Japanese classes to prep for the Meridian Health office opening in Tokyo — my teacher 佐藤さん says my pronunciation is decent.\nMarco: 頑張って! Biscuit can be your study buddy.",
+   "created_at": "2026-07-10T10:16:47.383535+00:00",
+   "entity_edges": [
+    "e0",
+    "e4",
+    "e5",
+    "e6"
+   ],
+   "name": "ep-4",
+   "source": "message",
+   "source_description": "chat between friends",
+   "uuid": "ep4",
+   "valid_at": "2026-07-01T17:00:00+00:00"
+  }
+ ],
+ "nodes": [
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:11.115411+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Biscuit",
+   "summary": "Priya owns a dog named Biscuit\nBiscuit is Priya Raman's dog.",
+   "uuid": "n0"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:20.884620+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Flatiron Building",
+   "summary": "The data engineering meetup takes place at the Flatiron Building.",
+   "uuid": "n1"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:05.526635+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Queens",
+   "summary": "Priya commutes from Queens",
+   "uuid": "n10"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:20.884659+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Sam Okafor",
+   "summary": "Sam Okafor is speaking at the data engineering meetup in New York City at the Flatiron Building.\nSam Okafor is a teammate of Priya at Northwind Labs.\nSam Okafor is speaking about stream processing at the data engineering meetup.",
+   "uuid": "n11"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:49.080811+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Tokyo",
+   "summary": "Meridian Health is opening an office in Tokyo.",
+   "uuid": "n12"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:20.884538+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "data engineering meetup",
+   "summary": "Priya will attend the data engineering meetup in New York City at the Flatiron Building on Thursday.\nMarco invited Priya to the data engineering meetup in New York City at the Flatiron Building on Thursday.\nSam Okafor is speaking at the data engineering meetup in New York City at the Flatiron Building.\nThe data engineering meetup takes place in New York City.\nThe data engineering meetup takes place at the Flatiron Building.",
+   "uuid": "n13"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:20.884736+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "stream processing",
+   "summary": "Sam Okafor is speaking about stream processing at the data engineering meetup.",
+   "uuid": "n14"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:49.080850+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "佐藤さん",
+   "summary": "Priya Raman's Japanese teacher (佐藤さん) says her pronunciation is decent.",
+   "uuid": "n15"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:49.080728+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Japanese classes",
+   "summary": "Priya Raman started taking Japanese classes to prepare for the Meridian Health office opening in Tokyo.",
+   "uuid": "n2"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:11.115540+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Knicks game",
+   "summary": "Marco caught a Knicks game with his brother",
+   "uuid": "n3"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:05.526315+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Marco",
+   "summary": "Marco caught a Knicks game with his brother\nMarco invited Priya to the data engineering meetup in New York City at the Flatiron Building on Thursday.\nMarco congratulated Priya Raman on her new job.",
+   "uuid": "n4"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:38.709778+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Meridian Health",
+   "summary": "Priya will start at Meridian Health next month as a senior data engineer.\nMeridian Health is opening an office in Tokyo.",
+   "uuid": "n5"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:20.884580+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "New York City",
+   "summary": "The data engineering meetup takes place in New York City.",
+   "uuid": "n6"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:05.526623+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Northwind Labs",
+   "summary": "Priya joined Northwind Labs as a data engineer in January\nSam Okafor is a teammate of Priya at Northwind Labs.\nPriya left Northwind Labs last Friday.",
+   "uuid": "n7"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:05.526602+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Priya",
+   "summary": "Priya joined Northwind Labs as a data engineer in January\nPriya commutes from Queens\nPriya owns a dog named Biscuit\nPriya walked her dog Biscuit around Prospect Park\nPriya will attend the data engineering meetup in New York City at the Flatiron Building on Thursday.\nPriya left Northwind Labs last Friday.\nPriya will start at Meridian Health next month as a senior data engineer.\nMarco congratulated Priya Raman on her new job.\nPriya left Northwind Labs last Friday.\nPriya will start at Meridian Health next month as a senior data engineer.\nMarco congratulated Priya Raman on her new job.\nPriya Raman started taking Japanese classes to prepare for the Meridian Health office opening in Tokyo.\nPriya Raman's Japanese teacher (佐藤さん) says her pronunciation is decent.\nBiscuit is Priya Raman's dog.",
+   "uuid": "n8"
+  },
+  {
+   "attributes": {},
+   "created_at": "2026-07-10T10:16:11.115455+00:00",
+   "labels": [
+    "Entity"
+   ],
+   "name": "Prospect Park",
+   "summary": "Priya walked her dog Biscuit around Prospect Park",
+   "uuid": "n9"
+  }
+ ]
+}

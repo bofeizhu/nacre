@@ -11,7 +11,7 @@
   "messages": [
    {
     "role": "system",
-    "content": "You are a helpful assistant that combines summaries into a single dense factual summary."
+    "content": "You are a helpful assistant that combines summaries into a single dense factual summary.\nDo not escape unicode characters.\n"
    },
    {
     "role": "user",
@@ -44,7 +44,7 @@
   "messages": [
    {
     "role": "system",
-    "content": "You are a helpful assistant that generates detailed, information-dense summaries and attributes from provided text."
+    "content": "You are a helpful assistant that generates detailed, information-dense summaries and attributes from provided text.\nDo not escape unicode characters.\n"
    },
    {
     "role": "user",
@@ -61,7 +61,7 @@
   "messages": [
    {
     "role": "system",
-    "content": "You are a helpful assistant that describes provided contents in a single sentence."
+    "content": "You are a helpful assistant that describes provided contents in a single sentence.\nDo not escape unicode characters.\n"
    },
    {
     "role": "user",

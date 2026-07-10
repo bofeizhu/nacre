@@ -105,18 +105,38 @@ class RecordingLLMClient(LLMClient):
         # Key by the PRE-mutation messages; hand the inner client copies,
         # since generate_response mutates message contents in place.
         request = llm_request_key(messages, response_model, max_tokens, model_size)
-        copies = [m.model_copy(deep=True) for m in messages]
-        response = await self.inner.generate_response(
-            copies,
-            response_model=response_model,
-            max_tokens=max_tokens,
-            model_size=model_size,
-            group_id=group_id,
-            prompt_name=prompt_name,
-            attribute_extraction=attribute_extraction,
-        )
-        self.log.record(request, response)
-        return response
+        last_err: Exception | None = None
+        for attempt in range(3):
+            copies = [m.model_copy(deep=True) for m in messages]
+            response = await self.inner.generate_response(
+                copies,
+                response_model=response_model,
+                max_tokens=max_tokens,
+                model_size=model_size,
+                group_id=group_id,
+                prompt_name=prompt_name,
+                attribute_extraction=attribute_extraction,
+            )
+            # In json_object mode the provider does not enforce the schema and
+            # graphiti's client does not validate — a malformed response (e.g.
+            # a schema echo) would be recorded and then crash the pipeline,
+            # poisoning the trace. Only record responses the pipeline can
+            # actually consume; retry the provider otherwise.
+            if response_model is not None:
+                try:
+                    response_model.model_validate(response)
+                except Exception as e:  # pydantic.ValidationError
+                    last_err = e
+                    print(
+                        f'  retry {attempt + 1}: {response_model.__name__} '
+                        f'response failed validation, re-asking provider'
+                    )
+                    continue
+            self.log.record(request, response)
+            return response
+        raise RuntimeError(
+            f'provider never produced a valid {response_model.__name__} response'
+        ) from last_err
 
 
 class ReplayLLMClient(LLMClient):
@@ -149,6 +169,16 @@ class ReplayLLMClient(LLMClient):
         return self.index[key]
 
 
+def _normalize_inputs(input_data) -> list[str]:
+    """Upstream EmbedderClient.create accepts str or list[str]; recordings
+    key on the list form."""
+    if isinstance(input_data, str):
+        return [input_data]
+    if isinstance(input_data, list) and all(isinstance(x, str) for x in input_data):
+        return input_data
+    raise TypeError(f'only str / list[str] inputs are recordable, got {type(input_data)!r}')
+
+
 def _embedder_model_id(inner: EmbedderClient) -> str:
     config = getattr(inner, 'config', None)
     return getattr(config, 'embedding_model', None) or type(inner).__name__
@@ -163,10 +193,9 @@ class RecordingEmbedder(EmbedderClient):
         self.model_id = _embedder_model_id(inner)
 
     async def create(self, input_data) -> list[float]:
-        if not isinstance(input_data, str):
-            raise TypeError(f'only str inputs are recorded, got {type(input_data)!r}')
+        inputs = _normalize_inputs(input_data)
         vector = await self.inner.create(input_data)
-        self.log.record({'inputs': [input_data], 'model_id': self.model_id}, [vector])
+        self.log.record({'inputs': inputs, 'model_id': self.model_id}, [vector])
         return vector
 
     async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
@@ -189,9 +218,7 @@ class ReplayEmbedderClient(EmbedderClient):
         return self.index[key]
 
     async def create(self, input_data) -> list[float]:
-        if not isinstance(input_data, str):
-            raise TypeError(f'only str inputs are replayable, got {type(input_data)!r}')
-        return self._lookup([input_data])[0]
+        return self._lookup(_normalize_inputs(input_data))[0]
 
     async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
         return self._lookup(input_data_list)

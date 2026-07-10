@@ -5,4 +5,114 @@ golden-trace fixture is recorded here: what diverges, why it is correct or
 acceptable, and which fixture/test asserts the divergent behavior. A red
 conformance test may only merge together with its entry here.
 
-*(none yet — conformance testing begins with the first golden traces)*
+## Edge dedup/invalidation candidate pools are engine-free and fact-sorted
+
+**What diverges:** Upstream builds the `EXISTING FACTS` and `FACT
+INVALIDATION CANDIDATES` prompt lists from a FalkorDB hybrid search
+(RRF over RediSearch BM25 + HNSW cosine, truncated to
+`RELEVANT_SCHEMA_LIMIT` = 10) and renders them in engine result order.
+Neither the membership at the truncation margin nor the order is
+reproducible: FalkorDB's `collect()` does not honor the preceding
+`ORDER BY`, index scan order varies per process (verified empirically —
+capture and replay shuffled identical candidate sets; the order matches
+neither cosine-score-descending nor creation order), HNSW is built with
+random level draws, and BM25/HNSW rankings are engine-specific, so no
+other storage engine can reproduce the top-10 cut. Both sides of the
+oracle replace the search with an engine-free equivalent:
+
+- pool = ALL edges saved in the group before the current episode
+  (upstream bulk-saves an episode's edges after resolving the whole
+  batch, so same-episode edges are never candidates);
+- same-endpoint-pair edges → `EXISTING FACTS` (upstream's
+  `get_between_nodes` semantics, preserved through the `edge_uuids`
+  search filter); the rest → `FACT INVALIDATION CANDIDATES`;
+- both lists sorted by `(fact, uuid)` — a total, portable order (UTF-8
+  byte order == code-point order, so Rust and Python agree); the uuid
+  tie-break only reorders byte-identical facts, which render identically.
+
+Harness side: `oracle/capture.py` monkeypatches the edge-resolution
+`search` binding. nacre side: `pipeline.rs::group_edges_snapshot` + the
+sort before `resolve_extracted_edge`.
+
+**Why acceptable:** Candidate pools feed LLM prompts, so unlike retrieval
+rank order they change graph state and must be pinned deterministically.
+At oracle-trace scale (well under ~10 relevant edges per query in spirit,
+17 edges total in trace1) the engine-free pool is a superset of upstream's
+top-10 relevance cut and carries the same information to the LLM; the
+related/invalidation split and the same-episode exclusion — the semantics
+that matter — are preserved exactly.
+
+**Asserted by:** `tests/conformance.rs::golden_trace1_conformance` (every
+`EdgeDuplicate` recording lookup embeds the pools — wrong membership or
+order is a replay miss).
+
+## Node dedup candidate search is engine-free pinned-arithmetic cosine
+
+**What diverges:** Upstream's `_semantic_candidate_search` ranks node dedup
+candidates with an in-engine vector search (`node_similarity_search`,
+limit 15, strict `score > 0.6`) — the same nondeterminism class as the
+edge hybrid search (engine scan order, HNSW randomness, engine-internal
+float paths). Both sides of the oracle replace it with an equivalent
+either can compute bit-for-bit:
+
+- embed the extracted names (upstream's own query batch) and every
+  distinct existing group-node name, sorted, so capture and nacre issue
+  byte-identical — and therefore recordable/replayable — embedder requests;
+- rank existing nodes by cosine over f32-truncated components with
+  sequential f64 accumulation (`pipeline.rs::cosine_f64` ==
+  `capture.py::_cosine_f64`, IEEE-identical), strict `> 0.6`, limit 15,
+  ties broken by uuid.
+
+Harness side: `oracle/capture.py` monkeypatches
+`node_operations._semantic_candidate_search`. nacre side: the candidate
+block in `pipeline.rs::add_episode` (this replaced grit's
+`find_merge_candidates` in the pipeline; grit keeps that API for its own
+callers).
+
+**Why acceptable:** Candidate pools feed the dedupe prompt, so they must be
+pinned deterministically (see the edge-pool entry). The selection rule —
+cosine over the same recorded embeddings, same threshold, same limit — is
+upstream's own semantics with the engine variability removed. The uuid
+tie-break is per-run, but score ties require byte-identical names, which
+the exact-match fast path resolves before any prompt is built. Cost: the
+harness re-embeds existing names once per episode instead of reading
+stored vectors (recorded, so replay/conformance never touch the network).
+
+**Asserted by:** `tests/conformance.rs::golden_trace1_conformance` (every
+`NodeResolutions` recording lookup embeds the pools and their order).
+
+## `expired_at` compared by presence only
+
+**What diverges:** Upstream stamps `expired_at` with `utc_now()` at the
+moment the pipeline notices an invalidation — pure wall-clock provenance,
+different in every run (Python capture vs Python replay already differ).
+nacre stamps it from the injected `Clock`.
+
+**Why acceptable:** Unlike `valid_at`/`invalid_at` (semantic times asserted
+to the second), `expired_at` carries no information beyond "this edge was
+expired during processing". The conformance differ normalizes it to a
+presence flag, same as it drops `created_at`.
+
+**Asserted by:** `diff_states` in `tests/conformance.rs` (a wrongly
+expired / wrongly live edge still fails; only the timestamp value is
+ignored). Same normalization in `oracle/capture.py::_replay_verdict`.
+
+## Retrieval rank order is not asserted against the fixture
+
+**What diverges:** `retrieval.json` records Graphiti's RRF search results at
+capture time, but FalkorDB's HNSW vector index is built with random level
+draws, so approximate-KNN results vary per process. Verified empirically:
+`capture.py --replay` (identical recorded embeddings, identical graph) gets
+different rank order on 3 of 5 trace1 queries and different top-10
+membership on 2 of them. Pinned Python Graphiti cannot reproduce its own
+retrieval, so it cannot be a rank oracle for grit.
+
+**Why acceptable:** Rank-order conformance is only meaningful against a
+deterministic reference. grit's RRF search is deterministic and covered by
+grit's own tests. The conformance test still asserts retrieval sanity:
+every fixture result exists in the ingested corpus and every trace query
+returns hits from grit. `capture.py --replay` prints a per-query
+rank/set comparison as an advisory signal.
+
+**Asserted by:** the sanity block in
+`tests/conformance.rs::golden_trace1_conformance`.

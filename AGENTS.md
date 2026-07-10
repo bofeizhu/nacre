@@ -59,7 +59,10 @@ re-capture golden traces, adapt. Never chase upstream continuously.
 5. **The golden-trace oracle defines "correct".** Pinned Python Graphiti v0.29.2
    + FalkorDB, run on fixed episode inputs with recorded LLM responses, produces
    frozen graph-state and retrieval fixtures. The Rust stack (nacre + grit) must
-   reproduce them — field-for-field on graph state, rank-order on retrieval.
+   reproduce the graph state field-for-field. Retrieval fixtures are advisory
+   only: FalkorDB's HNSW index makes Python Graphiti's own retrieval
+   nondeterministic across runs (see DEVIATIONS.md "Retrieval rank order"), so
+   rank parity is asserted by grit's deterministic search tests instead.
    Capture harness and fixtures live in `oracle/`. Divergences are either bugs
    or documented, justified deviations in `DEVIATIONS.md` — never silent.
 6. **License: Apache-2.0 only** (unlike grit's dual MIT/Apache). Nacre contains
@@ -124,7 +127,8 @@ nacre/
   Deterministic, offline, fast.
 - **Golden-trace conformance**: replay the oracle fixtures end-to-end through
   nacre + grit; diff graph state field-for-field (UUIDs mapped, timestamps from
-  the injected clock) and retrieval results by rank. One conformance test per
+  the injected clock, `expired_at` by presence) plus retrieval sanity checks
+  (rank order is advisory — see DEVIATIONS.md). One conformance test per
   fixture; a red conformance test blocks merge unless the diff lands in
   `DEVIATIONS.md` the same commit.
 - **Property tests** where judgment is NOT involved: chunking, prompt-context
