@@ -142,6 +142,24 @@ EXISTING_NODES = [
 ]
 
 CONTEXTS: dict[str, list[dict]] = {
+    'summarize_nodes': [
+        {
+            '_function': 'summarize_pair',
+            'node_summaries': ['Jordan Lee works at Belmont Arts Center.', 'Jordan supervises two studio assistants — 陶芸の先生.'],
+        },
+        {
+            '_function': 'summarize_context',
+            'previous_episodes': PREVIOUS_EPISODES,
+            'episode_content': EPISODE_CONTENT,
+            'node_name': 'Jordan Lee',
+            'node_summary': 'Jordan Lee works at Belmont Arts Center.',
+            'attributes': ['role', 'industry'],
+        },
+        {
+            '_function': 'summary_description',
+            'summary': 'Jordan Lee teaches ceramics and supervises two assistants.',
+        },
+    ],
     'dedupe_nodes': [
         {
             '_function': 'node',

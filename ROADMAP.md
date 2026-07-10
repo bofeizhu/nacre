@@ -51,8 +51,11 @@ increment. Conventions (binding for any agent working this file):
       `src/prompts/dedupe_nodes.rs` (node, nodes incl. len() arithmetic,
       node_list) + `src/prompts/dedupe_edges.rs` (resolve_edge), 4 fixture
       cases.
-- [ ] Verbatim prompt port: `summarize_nodes` family (skip sagas — deferred,
-      see AGENTS.md open questions).
+- [x] Verbatim prompt port: `summarize_nodes` family →
+      `src/prompts/summarize_nodes.rs` (summarize_pair, summarize_context,
+      summary_description), 3 fixture cases. All five prompt families are now
+      ported (23 fixture cases total); PROMPTS.md records what was deliberately
+      NOT ported (combined extraction, sagas, eval, lib registry).
 - [ ] oracle/ harness **code** (no networked run yet): uv project pinning
       `graphiti-core==0.29.2` + falkordb, docker-compose for FalkorDB, a
       recording LLM-client + embedder wrapper (capture/replay), a `capture`

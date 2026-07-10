@@ -20,6 +20,7 @@ pub mod extract_nodes;
 pub mod helpers;
 pub mod py;
 pub mod snippets;
+pub mod summarize_nodes;
 
 use crate::model::{Message, Role};
 

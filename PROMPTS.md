@@ -31,3 +31,12 @@ are rendered from the actual upstream Python by
 | `prompts/dedupe_nodes.py::nodes` | `src/prompts/dedupe_nodes.rs` | none | |
 | `prompts/dedupe_nodes.py::node_list` | `src/prompts/dedupe_nodes.rs` | none | |
 | `prompts/dedupe_edges.py::resolve_edge` | `src/prompts/dedupe_edges.rs` | none | |
+| `prompts/summarize_nodes.py::summarize_pair` | `src/prompts/summarize_nodes.rs` | none | |
+| `prompts/summarize_nodes.py::summarize_context` | `src/prompts/summarize_nodes.rs` | none | |
+| `prompts/summarize_nodes.py::summary_description` | `src/prompts/summarize_nodes.rs` | none | |
+
+Not ported (deliberately): `prompts/extract_nodes_and_edges.py` (combined
+path — capture traces first to see which path Graphiti defaults to, per
+AGENTS.md open questions), `prompts/summarize_sagas.py` (deferred),
+`prompts/eval.py` (eval-only), `prompts/lib.py` (prompt registry — Rust
+callers import functions directly).
