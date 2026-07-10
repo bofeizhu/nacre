@@ -126,55 +126,19 @@ fn existing_edge_from(edge: &grit_core::Edge) -> ExistingEdge {
     }
 }
 
-/// Snapshot every node in a group from grit's export stream (see
-/// [`group_edges_snapshot`] for why export is the enumeration path).
+/// Live nodes in a group (grit's id-ordered scan, expired rows dropped):
+/// upstream never persists merged-away drafts, so its candidate pools
+/// cannot contain them — grit keeps the expired draft rows for audit, and
+/// two same-name rows would wrongly turn exact-match resolutions ambiguous.
 fn group_nodes_snapshot(
     grit: &Grit,
     group_id: &str,
 ) -> Result<Vec<grit_core::Node>, PipelineError> {
-    let mut buffer: Vec<u8> = Vec::new();
-    grit.export_jsonl(&mut buffer)?;
-    let export = String::from_utf8(buffer).expect("export is UTF-8");
-    let mut nodes: Vec<grit_core::Node> = Vec::new();
-    for line in export.lines() {
-        let value: serde_json::Value = serde_json::from_str(line).expect("export line is JSON");
-        if value["t"] == "node" {
-            let node: grit_core::Node =
-                serde_json::from_value(value).expect("node record round-trips");
-            // Live nodes only: upstream never persists merged-away drafts,
-            // so its candidate pools cannot contain them — grit keeps the
-            // expired draft rows for audit, and two same-name rows would
-            // wrongly turn exact-match resolutions ambiguous.
-            if node.group_id == group_id && node.expired_at.is_none() {
-                nodes.push(node);
-            }
-        }
-    }
-    Ok(nodes)
-}
-
-/// Snapshot every edge in a group from grit's export stream. grit exposes
-/// getters by id only, so the JSONL export is the enumeration path — fine
-/// within nacre's scale envelope; revisit if grit grows a group-scan API.
-fn group_edges_snapshot(
-    grit: &Grit,
-    group_id: &str,
-) -> Result<Vec<grit_core::Edge>, PipelineError> {
-    let mut buffer: Vec<u8> = Vec::new();
-    grit.export_jsonl(&mut buffer)?;
-    let export = String::from_utf8(buffer).expect("export is UTF-8");
-    let mut edges: Vec<grit_core::Edge> = Vec::new();
-    for line in export.lines() {
-        let value: serde_json::Value = serde_json::from_str(line).expect("export line is JSON");
-        if value["t"] == "edge" {
-            let edge: grit_core::Edge =
-                serde_json::from_value(value).expect("edge record round-trips");
-            if edge.group_id == group_id {
-                edges.push(edge);
-            }
-        }
-    }
-    Ok(edges)
+    Ok(grit
+        .nodes_in_group(group_id)?
+        .into_iter()
+        .filter(|node| node.expired_at.is_none())
+        .collect())
 }
 
 /// Cosine similarity with pinned arithmetic: components are f32 (both
@@ -412,7 +376,7 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
     // the rest of the group is the invalidation pool (engine-free stand-in
     // for upstream's relevance-truncated hybrid search — see DEVIATIONS.md
     // "Edge dedup/invalidation candidate pools").
-    let group_edges = group_edges_snapshot(grit, &episode.group_id)?;
+    let group_edges = grit.edges_in_group(&episode.group_id)?;
 
     for draft_edge in &draft_edges {
         let src: Uuid = draft_edge.source_id.parse().expect("grit ids round-trip");

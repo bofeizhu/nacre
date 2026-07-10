@@ -218,8 +218,13 @@ fine (replay only fails on unrecorded requests nacre makes).
       getters None when no model/vector; note `cargo update -p grit-core`
       is needed after adding the patch override (the lockfile pins the
       registry 0.2.0 otherwise and the patch is silently unused).
-- [ ] nacre: replace the `export_jsonl`-parse snapshots in pipeline.rs with
+- [x] nacre: replace the `export_jsonl`-parse snapshots in pipeline.rs with
       grit's group-scan API (pure refactor; conformance green proves it).
+      → done 2026-07-10: group_edges_snapshot deleted outright
+      (edges_in_group call inlined); group_nodes_snapshot kept as a thin
+      live-only filter over nodes_in_group (the merged-away-drafts exclusion
+      rationale lives there). Scan order matches the old export order
+      (id-ordered), so candidate pools are byte-stable — conformance green.
 - [ ] nacre: persist embeddings at write time, mirroring upstream's
       `create_entity_node_embeddings` / `create_entity_edge_embeddings`:
       consult the pinned Python for the exact input strings (e.g.
