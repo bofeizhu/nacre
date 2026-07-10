@@ -10,7 +10,10 @@ same episode inputs + recordings.
 
 Usage (manual, networked — never CI):
     docker compose up -d                       # FalkorDB on :6379
-    export OPENAI_API_KEY=...
+    export OPENAI_API_KEY=...                  # LLM + embeddings, or:
+    #   CAPTURE_LLM_BASE_URL=https://api.deepseek.com \
+    #   CAPTURE_LLM_API_KEY=... CAPTURE_LLM_MODEL=<deepseek model> \
+    #   OPENAI_API_KEY=...                     # embeddings only (DeepSeek has none)
     uv run python capture.py episodes/trace1.json
     uv run python capture.py episodes/trace1.json --replay   # offline verify
 
@@ -34,8 +37,10 @@ from pathlib import Path
 from graphiti_core import Graphiti
 from graphiti_core.driver.falkordb_driver import FalkorDriver
 from graphiti_core.edges import EntityEdge
-from graphiti_core.embedder.openai import OpenAIEmbedder
+from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.openai_client import OpenAIClient
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from recording_clients import (
@@ -48,6 +53,41 @@ from recording_clients import (
 )
 
 ORACLE = Path(__file__).resolve().parent
+
+
+def build_capture_llm_client():
+    """LLM provider from env. Defaults to OpenAI; any OpenAI-compatible
+    endpoint works via CAPTURE_LLM_BASE_URL (DeepSeek, vLLM, Together...).
+    Custom endpoints use OpenAIGenericClient with json_object structured
+    output by default (DeepSeek does not support json_schema); override
+    with CAPTURE_LLM_STRUCTURED_OUTPUT=json_schema where supported."""
+    base_url = os.environ.get('CAPTURE_LLM_BASE_URL')
+    config = LLMConfig(
+        api_key=os.environ.get('CAPTURE_LLM_API_KEY') or os.environ.get('OPENAI_API_KEY'),
+        base_url=base_url,
+        model=os.environ.get('CAPTURE_LLM_MODEL'),
+        small_model=os.environ.get('CAPTURE_LLM_SMALL_MODEL')
+        or os.environ.get('CAPTURE_LLM_MODEL'),
+    )
+    if base_url:
+        mode = os.environ.get('CAPTURE_LLM_STRUCTURED_OUTPUT', 'json_object')
+        return OpenAIGenericClient(config=config, structured_output_mode=mode)
+    return OpenAIClient(config=config)
+
+
+def build_capture_embedder():
+    """Embeddings provider from env. DeepSeek has no embeddings endpoint,
+    so this typically stays OpenAI (text-embedding-3-small; the whole
+    capture costs fractions of a cent) even when the LLM lives elsewhere."""
+    kwargs = {
+        'api_key': os.environ.get('CAPTURE_EMBEDDER_API_KEY')
+        or os.environ.get('OPENAI_API_KEY'),
+    }
+    if os.environ.get('CAPTURE_EMBEDDER_BASE_URL'):
+        kwargs['base_url'] = os.environ['CAPTURE_EMBEDDER_BASE_URL']
+    if os.environ.get('CAPTURE_EMBEDDER_MODEL'):
+        kwargs['embedding_model'] = os.environ['CAPTURE_EMBEDDER_MODEL']
+    return OpenAIEmbedder(config=OpenAIEmbedderConfig(**kwargs))
 
 
 def iso(value) -> str | None:
@@ -158,8 +198,8 @@ async def run(spec_path: Path, out_dir: Path, replay: bool) -> None:
         model_id = embed_recordings[0]['request']['model_id'] if embed_recordings else 'unknown'
         embedder = ReplayEmbedderClient(embed_index, model_id)
     else:
-        llm_client = RecordingLLMClient(OpenAIClient(), llm_log)
-        embedder = RecordingEmbedder(OpenAIEmbedder(), embed_log)
+        llm_client = RecordingLLMClient(build_capture_llm_client(), llm_log)
+        embedder = RecordingEmbedder(build_capture_embedder(), embed_log)
 
     graphiti = Graphiti(
         graph_driver=driver,
