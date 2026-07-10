@@ -16,31 +16,64 @@ use serde_json::{Value, json};
 
 use super::{CompletionRequest, LanguageModel, Message, ModelError, ModelSize, Role};
 
-const API_URL: &str = "https://api.anthropic.com/v1/messages";
+const DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 /// Upstream `LLMClient` default when the caller passes no max_tokens.
 const DEFAULT_MAX_TOKENS: u32 = 16000;
 const MAX_RETRIES: u32 = 2;
 
+/// How schema conformance is obtained from the endpoint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StructuredOutput {
+    /// Anthropic-native `output_config.format` json_schema enforcement.
+    JsonSchema,
+    /// Append the schema to the last prompt message and trust the model —
+    /// upstream's `OpenAIGenericClient` json_object strategy, for
+    /// Anthropic-COMPATIBLE endpoints (e.g. DeepSeek's) that speak the
+    /// Messages API but not structured outputs. A client-internal mutation:
+    /// the recording contract keys on pre-mutation messages.
+    SchemaInPrompt,
+}
+
 /// Configuration for [`ClaudeModel`].
 #[derive(Debug, Clone)]
 pub struct ClaudeConfig {
-    /// API key (`sk-ant-...`).
+    /// API root (no trailing slash; `/v1/messages` is appended). Defaults
+    /// to `https://api.anthropic.com`.
+    pub base_url: String,
+    /// API key (`sk-ant-...` for Anthropic; provider-specific otherwise).
     pub api_key: String,
     /// Model used for [`ModelSize::Medium`] requests.
     pub medium_model: String,
     /// Model used for [`ModelSize::Small`] requests.
     pub small_model: String,
+    /// Schema conformance mechanism.
+    pub structured_output: StructuredOutput,
 }
 
 impl ClaudeConfig {
-    /// Defaults: Opus 4.8 for the default tier, Haiku 4.5 for the small
-    /// tier (Graphiti routes cheap judgment calls to a smaller model).
+    /// Anthropic defaults: Opus 4.8 for the default tier, Haiku 4.5 for the
+    /// small tier (Graphiti routes cheap judgment calls to a smaller
+    /// model), native structured outputs.
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
+            base_url: DEFAULT_BASE_URL.to_owned(),
             api_key: api_key.into(),
             medium_model: "claude-opus-4-8".to_owned(),
             small_model: "claude-haiku-4-5".to_owned(),
+            structured_output: StructuredOutput::JsonSchema,
+        }
+    }
+
+    /// DeepSeek's Anthropic-style endpoint: same wire format, no native
+    /// structured outputs — the schema rides in the prompt instead.
+    pub fn deepseek(api_key: impl Into<String>) -> Self {
+        Self {
+            base_url: "https://api.deepseek.com/anthropic".to_owned(),
+            api_key: api_key.into(),
+            medium_model: "deepseek-chat".to_owned(),
+            small_model: "deepseek-chat".to_owned(),
+            structured_output: StructuredOutput::SchemaInPrompt,
         }
     }
 }
@@ -72,8 +105,14 @@ impl ClaudeModel {
 ///
 /// System messages map to the top-level `system` parameter; user/assistant
 /// messages stay in `messages`. When the schema name is registered, the
-/// response format is enforced with structured outputs.
-pub fn build_request_body(request: &CompletionRequest, model: &str) -> Value {
+/// response format is enforced with structured outputs
+/// ([`StructuredOutput::JsonSchema`]) or requested via a schema block
+/// appended to the last message ([`StructuredOutput::SchemaInPrompt`]).
+pub fn build_request_body(
+    request: &CompletionRequest,
+    model: &str,
+    mode: StructuredOutput,
+) -> Value {
     let mut system_parts: Vec<&str> = Vec::new();
     let mut messages: Vec<Value> = Vec::new();
     for Message { role, content } in &request.messages {
@@ -84,6 +123,21 @@ pub fn build_request_body(request: &CompletionRequest, model: &str) -> Value {
         }
     }
 
+    let schema = schema_for(&request.schema_name);
+    if mode == StructuredOutput::SchemaInPrompt
+        && let Some(schema) = &schema
+        && let Some(last) = messages.last_mut()
+    {
+        // ports: openai_generic_client.py json_object mode — the schema is
+        // appended to the last message; wording kept identical.
+        let appended = format!(
+            "{}\n\nRespond with a JSON object in the following format:\n\n{}",
+            last["content"].as_str().unwrap_or_default(),
+            schema
+        );
+        last["content"] = json!(appended);
+    }
+
     let mut body = json!({
         "model": model,
         "max_tokens": request.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS),
@@ -92,7 +146,9 @@ pub fn build_request_body(request: &CompletionRequest, model: &str) -> Value {
     if !system_parts.is_empty() {
         body["system"] = json!(system_parts.join("\n\n"));
     }
-    if let Some(schema) = schema_for(&request.schema_name) {
+    if mode == StructuredOutput::JsonSchema
+        && let Some(schema) = schema
+    {
         body["output_config"] = json!({
             "format": {"type": "json_schema", "schema": schema}
         });
@@ -230,18 +286,38 @@ pub fn parse_response_body(body: &Value) -> Result<Value, ModelError> {
                 .and_then(|b| b["text"].as_str())
         })
         .ok_or_else(|| ModelError::Provider("response has no text block".to_owned()))?;
-    serde_json::from_str(text)
+    // Compatible endpoints in schema-in-prompt mode often wrap JSON in a
+    // markdown fence; native structured outputs never do. Stripping is
+    // harmless either way.
+    serde_json::from_str(strip_code_fences(text))
         .map_err(|e| ModelError::Provider(format!("response text is not valid JSON: {e}")))
+}
+
+/// Trim a ```json ... ``` (or bare ```) fence if the whole payload is
+/// wrapped in one.
+// ports: openai_generic_client.py::_strip_code_fences
+fn strip_code_fences(text: &str) -> &str {
+    let trimmed = text.trim();
+    let Some(rest) = trimmed.strip_prefix("```") else {
+        return trimmed;
+    };
+    let rest = rest.strip_prefix("json").unwrap_or(rest);
+    rest.strip_suffix("```").unwrap_or(rest).trim()
 }
 
 impl LanguageModel for ClaudeModel {
     async fn complete(&self, request: &CompletionRequest) -> Result<Value, ModelError> {
-        let body = build_request_body(request, self.model_for(request.model_size));
+        let body = build_request_body(
+            request,
+            self.model_for(request.model_size),
+            self.config.structured_output,
+        );
+        let url = format!("{}/v1/messages", self.config.base_url);
         let mut last_error = String::new();
         for attempt in 0..=MAX_RETRIES {
             let response = self
                 .client
-                .post(API_URL)
+                .post(&url)
                 .header("x-api-key", &self.config.api_key)
                 .header("anthropic-version", ANTHROPIC_VERSION)
                 .json(&body)
@@ -298,7 +374,11 @@ mod tests {
 
     #[test]
     fn request_body_maps_roles_and_enforces_schema() {
-        let body = build_request_body(&request("ExtractedEntities"), "claude-opus-4-8");
+        let body = build_request_body(
+            &request("ExtractedEntities"),
+            "claude-opus-4-8",
+            StructuredOutput::JsonSchema,
+        );
         assert_eq!(body["model"], "claude-opus-4-8");
         assert_eq!(body["max_tokens"], 16000);
         assert_eq!(body["system"], "You are an entity extraction specialist.");
@@ -315,7 +395,11 @@ mod tests {
 
     #[test]
     fn unregistered_schema_gets_no_output_constraint() {
-        let body = build_request_body(&request("SomethingCustom"), "claude-opus-4-8");
+        let body = build_request_body(
+            &request("SomethingCustom"),
+            "claude-opus-4-8",
+            StructuredOutput::JsonSchema,
+        );
         assert!(body.get("output_config").is_none());
     }
 
@@ -360,5 +444,27 @@ mod tests {
 
         let api_error = json!({"type": "error", "error": {"type": "invalid_request_error"}});
         assert!(parse_response_body(&api_error).is_err());
+    }
+    #[test]
+    fn schema_in_prompt_mode_appends_to_last_message() {
+        let body = build_request_body(
+            &request("ExtractedEntities"),
+            "deepseek-chat",
+            StructuredOutput::SchemaInPrompt,
+        );
+        assert!(body.get("output_config").is_none(), "no native enforcement");
+        let last = body["messages"].as_array().unwrap().last().unwrap();
+        let content = last["content"].as_str().unwrap();
+        assert!(content.contains("Respond with a JSON object in the following format:"));
+        assert!(content.contains("extracted_entities"));
+    }
+
+    #[test]
+    fn code_fences_are_stripped() {
+        let fenced = json!({
+            "stop_reason": "end_turn",
+            "content": [{"type": "text", "text": "```json\n{\"a\": 1}\n```"}],
+        });
+        assert_eq!(parse_response_body(&fenced).unwrap(), json!({"a": 1}));
     }
 }

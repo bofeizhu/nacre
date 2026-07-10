@@ -283,13 +283,20 @@ fine (replay only fails on unrecorded requests nacre makes).
       batch chunking — Zhipu's cap); responses re-ordered by index and
       truncated client-side (MRL slice, no renormalization); 429/5xx retry
       shares claude.rs's tokio-free sleep (hoisted to model/mod.rs).
-- [ ] nacre: `claude.rs` configurable base URL + API key env (defaults
+- [x] nacre: `claude.rs` configurable base URL + API key env (defaults
       unchanged: api.anthropic.com). Purpose: DeepSeek's Anthropic-style
       endpoint becomes usable through the same client. Verify whether it
       supports `output_config` json_schema; if not, add the
       schema-append-to-prompt fallback (the pattern upstream's
       OpenAIGenericClient json_object mode uses — nacre ported its prompt
       side already).
+      → done 2026-07-10: ClaudeConfig gains base_url +
+      StructuredOutput::{JsonSchema, SchemaInPrompt}; `deepseek()` preset
+      (api.deepseek.com/anthropic, deepseek-chat, schema-in-prompt) since
+      output_config support there is unverified offline — the smoke test
+      decides empirically. Fence stripping added to response parsing
+      (harmless for native mode). Keys stay caller-provided; env reading
+      belongs to the example, not the library.
 - [ ] Live smoke example (`examples/`, feature-gated, requires env keys,
       NEVER in cargo test): ingest a handful of real conversation turns with
       a live LLM (Claude or DeepSeek) + live Zhipu embeddings into a fresh
