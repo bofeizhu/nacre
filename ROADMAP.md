@@ -360,13 +360,19 @@ motivates; core changes must not alter recorded requests.
       expected deltas. Core change: SummarizeOptions' filter hook is now
       Send + Sync so pipeline futures cross the FFI (type-level only;
       conformance untouched).
-- [ ] Read path for the graph view: `nodesInGroup` / `edgesInGroup` /
+- [x] Read path for the graph view: `nodesInGroup` / `edgesInGroup` /
       `episodesInGroup` (full rows, JSON), `traverse(seeds, {depth,
       budget, asOf, asAt})` returning the Subgraph, `nodeHistory(id)`,
       `mentionsOf(id)`, `retrievePreviousEpisodes`. Timestamps as ISO
       strings; ids as strings. These five calls are the entire data
       contract the graph visualization needs — document that explicitly
       in the .d.ts docs.
+      → done 2026-07-10: rows.rs converters (labels unpacked from
+      attrs["labels"], RFC-3339 ms timestamps, remaining attrs as plain
+      JSON); previousEpisodes returns full rows (the pipeline helper's
+      prompt-shaped output stays internal). Exercised end-to-end from
+      Node: replay-ingest 2 episodes, then dump/traverse/history/
+      mentions/window all verified.
 - [ ] Search: `searchEdges(query, group, limit)` with the embedder config
       from JS ({provider: "zhipu" | "openai-compatible" | "replay", ...});
       hits carry facts, validity, provenance episode ids.

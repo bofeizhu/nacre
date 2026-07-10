@@ -6,11 +6,15 @@
 //! type-checks and compiles the cdylib without any Node toolchain.
 
 mod providers;
+mod rows;
 
 use chrono::{DateTime, Utc};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use providers::{EmbedderConfig, LlmConfig, build_embedder, build_model};
+use rows::{
+    EdgeRow, EpisodeRow, NodeHistoryJs, NodeRow, SubgraphJs, edge_row, episode_row, node_row,
+};
 
 use nacre_core::extract::{EpisodeInput, EpisodeSource};
 use nacre_core::pipeline::{
@@ -155,4 +159,155 @@ impl Memory {
                 .collect(),
         })
     }
+
+    // ------------------------------------------------------------------
+    // Read path. The five calls below are the entire data contract the
+    // memory-graph visualization needs: full dump (nodesInGroup /
+    // edgesInGroup / episodesInGroup), focus+context (traverse), and
+    // drill-down (nodeHistory + mentionsOf).
+    // ------------------------------------------------------------------
+
+    /// Every node in a group, id-ordered — full bi-temporal record
+    /// including merged-away rows (filter `expiredAt` for the live view).
+    #[napi]
+    pub fn nodes_in_group(&self, group_id: String) -> Result<Vec<NodeRow>> {
+        Ok(self
+            .grit
+            .nodes_in_group(&group_id)
+            .map_err(generic)?
+            .iter()
+            .map(node_row)
+            .collect())
+    }
+
+    /// Every edge in a group, id-ordered — invalidated and expired rows
+    /// included (that's the archaeology view).
+    #[napi]
+    pub fn edges_in_group(&self, group_id: String) -> Result<Vec<EdgeRow>> {
+        Ok(self
+            .grit
+            .edges_in_group(&group_id)
+            .map_err(generic)?
+            .iter()
+            .map(edge_row)
+            .collect())
+    }
+
+    /// Every episode in a group, chronological.
+    #[napi]
+    pub fn episodes_in_group(&self, group_id: String) -> Result<Vec<EpisodeRow>> {
+        Ok(self
+            .grit
+            .episodes_in_group(&group_id)
+            .map_err(generic)?
+            .iter()
+            .map(episode_row)
+            .collect())
+    }
+
+    /// Bounded neighborhood around seed nodes. `asOf` filters by event
+    /// time, `asAt` by belief time — both ISO-8601; omit for "now". The
+    /// node budget keeps the walk viewport-sized (default 256).
+    #[napi]
+    pub fn traverse(
+        &self,
+        seeds: Vec<String>,
+        options: Option<TraverseOptions>,
+    ) -> Result<SubgraphJs> {
+        let seeds: Vec<uuid::Uuid> = seeds
+            .iter()
+            .map(|s| {
+                s.parse()
+                    .map_err(|e| Error::new(Status::InvalidArg, format!("seed id {s:?}: {e}")))
+            })
+            .collect::<Result<_>>()?;
+        let mut traversal = grit_core::Traversal::default();
+        if let Some(options) = options {
+            if let Some(depth) = options.depth {
+                traversal = traversal.depth(depth);
+            }
+            if let Some(max_nodes) = options.max_nodes {
+                traversal = traversal.max_nodes(max_nodes as usize);
+            }
+            if let Some(group) = options.group_id {
+                traversal = traversal.group(group);
+            }
+            if let Some(as_of) = options.as_of.as_deref() {
+                traversal = traversal.as_of(parse_time(Some(as_of))?.timestamp_millis());
+            }
+            if let Some(as_at) = options.as_at.as_deref() {
+                traversal = traversal.as_at(parse_time(Some(as_at))?.timestamp_millis());
+            }
+        }
+        let sub = self.grit.traverse(&seeds, &traversal).map_err(generic)?;
+        Ok(SubgraphJs {
+            nodes: sub.nodes.iter().map(node_row).collect(),
+            edges: sub.edges.iter().map(edge_row).collect(),
+        })
+    }
+
+    /// A node's bi-temporal audit trail: the node row (even if expired)
+    /// plus every incident edge ever believed, oldest belief first.
+    #[napi]
+    pub fn node_history(&self, id: String) -> Result<NodeHistoryJs> {
+        let id: uuid::Uuid = id
+            .parse()
+            .map_err(|e| Error::new(Status::InvalidArg, format!("node id: {e}")))?;
+        let history = self.grit.node_history(id).map_err(generic)?;
+        Ok(NodeHistoryJs {
+            node: node_row(&history.node),
+            edges: history.edges.iter().map(edge_row).collect(),
+        })
+    }
+
+    /// Episode ids attributing a node or edge (provenance drill-down).
+    #[napi]
+    pub fn mentions_of(&self, id: String) -> Result<Vec<String>> {
+        let id: uuid::Uuid = id
+            .parse()
+            .map_err(|e| Error::new(Status::InvalidArg, format!("target id: {e}")))?;
+        Ok(self
+            .grit
+            .mentions_of(id)
+            .map_err(generic)?
+            .iter()
+            .map(|id| id.to_string())
+            .collect())
+    }
+
+    /// The previous-episode context window `addEpisode` would use at
+    /// `reference` (ISO-8601; omit for now) — last `lastN` episodes,
+    /// chronological. Useful for showing "what the pipeline will see".
+    #[napi]
+    pub fn previous_episodes(
+        &self,
+        group_id: String,
+        reference: Option<String>,
+        last_n: Option<u32>,
+    ) -> Result<Vec<EpisodeRow>> {
+        let reference = parse_time(reference.as_deref())?;
+        let last_n = last_n.map_or(PREVIOUS_EPISODE_WINDOW, |n| n as usize);
+        // The pipeline helper returns prompt-shaped inputs; the JS surface
+        // wants full rows — re-derive from the same chronological scan.
+        let mut episodes = self.grit.episodes_in_group(&group_id).map_err(generic)?;
+        episodes.retain(|e| e.occurred_at <= reference.timestamp_millis());
+        let start = episodes.len().saturating_sub(last_n);
+        Ok(episodes[start..].iter().map(episode_row).collect())
+    }
+}
+
+/// Options for [`Memory::traverse`].
+#[napi(object)]
+pub struct TraverseOptions {
+    /// Maximum hops from the seed set (default 3).
+    pub depth: Option<u32>,
+    /// Node budget — the walk halts once this many nodes are reached
+    /// (default 256).
+    pub max_nodes: Option<u32>,
+    /// Restrict to one group.
+    pub group_id: Option<String>,
+    /// Event-time instant (ISO-8601).
+    pub as_of: Option<String>,
+    /// Belief-time instant (ISO-8601) — the time-travel knob.
+    pub as_at: Option<String>,
 }
