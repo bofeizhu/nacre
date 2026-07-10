@@ -124,9 +124,27 @@ increment. Conventions (binding for any agent working this file):
       SummarizedEntities calls, case-insensitive name application with
       sentence-aware truncation, skip_fact_appending episode-prompt path,
       per-node filter hook.
-- [ ] `pipeline.rs`: `add_episode` seam stringing the steps, emitting +
-      applying the `GraphOp` stream (ports `graphiti.py::add_episode`
-      orchestration; date handling via injected Clock).
+- [x] `pipeline.rs`: `add_episode` seam stringing the steps onto grit's op
+      vocabulary: drafts → AddNode (kind = specific label, full labels in
+      attrs), find_merge_candidates pools (min 0.6, top 15, batch-mates
+      excluded) → resolve → MergeNodes, extract_edges over resolved NodeRefs,
+      per-edge resolution with related/invalidation pools from 1-hop
+      traversal, AddEdge (+InvalidateEdge for pre-bounded facts),
+      InvalidateEdge for contradictions, AddEpisode last with mentions.
+      End-to-end offline test against a real grit DB (two episodes: merge +
+      invalidation verified in storage). `now` injected.
+- [ ] BLOCKED(user decision: grit op-vocabulary extension) Persist summary
+      refresh + label promotion: grit v0.1 has no node-update op (AddNode /
+      AddEdge / AddEpisode / InvalidateEdge / MergeNodes / Purge only), so
+      the summarize step's output and dedup label promotion currently can't
+      be written back. Needs a grit-side decision (e.g. a `SetNodeSummary` /
+      `UpdateNode` op — touches the sync vocabulary, convergence property
+      tests, and a grit release + version bump per the umbrella co-dev flow).
+- [ ] Edge invalidation-candidate gathering parity: pipeline uses 1-hop
+      traversal around the endpoints; upstream gathers candidates by hybrid
+      search over edge facts. Revisit once embeddings are wired (grit search
+      needs vectors) and judge against golden trace #1 — record in
+      DEVIATIONS.md if the difference survives.
 - [ ] `search/`: search orchestration over grit's legs — config recipes,
       filters, fusion parity (ports `search/` minus Cypher generation).
 - [ ] Conformance harness: `tests/conformance.rs` loading `oracle/` fixtures,

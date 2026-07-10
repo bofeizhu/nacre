@@ -17,6 +17,7 @@
 pub mod dedupe;
 pub mod extract;
 pub mod model;
+pub mod pipeline;
 pub mod prompts;
 pub mod schemas;
 pub mod summarize;

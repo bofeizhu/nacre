@@ -20,6 +20,8 @@ serde = { version = "1.0", features = ["derive"] }
 # order (f-string repr and json.dumps), which BTreeMap ordering would break.
 serde_json = { version = "1.0", features = ["preserve_order"] }
 thiserror = "2.0.18"
+# Same type grit-core's API speaks (it doesn't re-export it).
+uuid = "1.23"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }
