@@ -297,12 +297,21 @@ fine (replay only fails on unrecorded requests nacre makes).
       decides empirically. Fence stripping added to response parsing
       (harmless for native mode). Keys stay caller-provided; env reading
       belongs to the example, not the library.
-- [ ] Live smoke example (`examples/`, feature-gated, requires env keys,
+- [x] Live smoke example (`examples/`, feature-gated, requires env keys,
       NEVER in cargo test): ingest a handful of real conversation turns with
       a live LLM (Claude or DeepSeek) + live Zhipu embeddings into a fresh
       grit file, then run a few searches and print results with provenance.
       First end-to-end run outside replay; expect to shake out retry/rate
       limit/error-surface gaps — fix them as part of this task.
+      → done 2026-07-10 in 2 live runs: examples/live_smoke.rs (DeepSeek
+      Anthropic-endpoint default, NACRE_SMOKE_ANTHROPIC_KEY switches to
+      Anthropic). Run 1 shook out exactly the expected gap — deepseek-chat
+      echoes schema scaffolding in prompt-only mode (same failure class the
+      Python capture hit) — fixed with required-keys validation +
+      salvage_shape unwrap + retry in claude.rs SchemaInPrompt mode. Run 2:
+      3 turns ingested (extraction, 5 merges, 1 invalidation
+      Rotterdam→Utrecht, summaries, embeddings persisted); all 3 queries
+      answered correctly with provenance. The full stack works live.
 - [ ] BLOCKED(user: cargo publish) Release grit 0.2.1 to crates.io, drop
       nacre's patch override, regenerate Cargo.lock against the registry,
       full gates both repos, commit + push both. Nacre's `grit-core = "0.2"`

@@ -305,6 +305,37 @@ fn strip_code_fences(text: &str) -> &str {
     rest.strip_suffix("```").unwrap_or(rest).trim()
 }
 
+/// The top-level `required` keys of a registered schema, for cheap
+/// response-shape validation in [`StructuredOutput::SchemaInPrompt`] mode
+/// (native mode is enforced by the API and needs none).
+fn required_keys(schema_name: &str) -> Vec<String> {
+    schema_for(schema_name)
+        .and_then(|s| {
+            s["required"].as_array().map(|keys| {
+                keys.iter()
+                    .filter_map(|k| k.as_str().map(str::to_owned))
+                    .collect()
+            })
+        })
+        .unwrap_or_default()
+}
+
+/// Salvage known non-conforming shapes prompt-only models produce: an
+/// object nested under `"properties"` (the model echoed the schema
+/// scaffolding — observed from deepseek-chat during oracle capture).
+fn salvage_shape(value: Value, required: &[String]) -> Value {
+    let conforms = |v: &Value| -> bool { required.iter().all(|k| v.get(k.as_str()).is_some()) };
+    if conforms(&value) {
+        return value;
+    }
+    if let Some(inner) = value.get("properties")
+        && conforms(inner)
+    {
+        return inner.clone();
+    }
+    value
+}
+
 impl LanguageModel for ClaudeModel {
     async fn complete(&self, request: &CompletionRequest) -> Result<Value, ModelError> {
         let body = build_request_body(
@@ -333,9 +364,26 @@ impl LanguageModel for ClaudeModel {
                         .await
                         .map_err(|e| ModelError::Provider(format!("invalid response: {e}")))?;
                     if !retryable {
-                        return parse_response_body(&value);
+                        let parsed = parse_response_body(&value)?;
+                        // Prompt-only schema conformance is best-effort:
+                        // validate the top-level shape and burn a retry on
+                        // a miss instead of failing the pipeline.
+                        if self.config.structured_output == StructuredOutput::SchemaInPrompt {
+                            let required = required_keys(&request.schema_name);
+                            let parsed = salvage_shape(parsed, &required);
+                            if required.iter().all(|k| parsed.get(k.as_str()).is_some()) {
+                                return Ok(parsed);
+                            }
+                            last_error = format!(
+                                "response missing required keys {required:?} for schema {}",
+                                request.schema_name
+                            );
+                        } else {
+                            return Ok(parsed);
+                        }
+                    } else {
+                        last_error = format!("HTTP {status}: {value}");
                     }
-                    last_error = format!("HTTP {status}: {value}");
                 }
             }
             if attempt < MAX_RETRIES {

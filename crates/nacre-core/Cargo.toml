@@ -34,3 +34,7 @@ openai-embed = ["dep:reqwest"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }
+
+[[example]]
+name = "live_smoke"
+required-features = ["claude", "openai-embed"]
