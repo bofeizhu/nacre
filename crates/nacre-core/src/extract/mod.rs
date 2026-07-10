@@ -101,6 +101,9 @@ pub struct DraftEdge {
     pub valid_at: Option<DateTime<Utc>>,
     /// Event time the fact stopped being true, when stated and parseable.
     pub invalid_at: Option<DateTime<Utc>>,
+    /// System time this edge stopped being believed; set by the resolution
+    /// step's expiry rules, never at extraction.
+    pub expired_at: Option<DateTime<Utc>>,
     /// The originating episode's timestamp (ISO 8601), for later temporal
     /// resolution — upstream `EntityEdge.reference_time`.
     pub reference_time: Option<String>,

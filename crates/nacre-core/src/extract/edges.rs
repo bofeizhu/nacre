@@ -239,6 +239,7 @@ pub async fn extract_edges<M: LanguageModel>(
             episode_indices: indices,
             valid_at,
             invalid_at,
+            expired_at: None,
             reference_time: reference_episode.valid_at.clone(),
         });
     }

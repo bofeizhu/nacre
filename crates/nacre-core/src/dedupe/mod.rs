@@ -8,9 +8,11 @@
 //! resolution first, one batched LLM escalation for the rest. Nacre
 //! decides; grit executes the resulting `MergeNodes` ops.
 
+pub mod edges;
 pub mod helpers;
 pub mod nodes;
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// An existing graph node offered as a dedup candidate. `id` is the
@@ -36,4 +38,39 @@ pub struct NodeResolution {
     /// label promotion already applied (a generic existing node inherits
     /// the draft's specific type). `None`: the draft stands as a new node.
     pub duplicate_of: Option<ExistingNode>,
+}
+
+/// A stored graph edge offered for edge dedup/invalidation. `id` is the
+/// storage identity (grit edge id).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExistingEdge {
+    /// Storage identity (grit edge id).
+    pub id: String,
+    /// Source node storage id.
+    pub source_id: String,
+    /// Target node storage id.
+    pub target_id: String,
+    /// Relation type.
+    pub name: String,
+    /// The fact sentence.
+    pub fact: String,
+    /// Storage ids of the episodes this edge is attributed to.
+    pub episodes: Vec<String>,
+    /// Event time the fact became true, if known.
+    pub valid_at: Option<DateTime<Utc>>,
+    /// Event time the fact stopped being true, if known.
+    pub invalid_at: Option<DateTime<Utc>>,
+    /// System time this edge stopped being believed, if expired.
+    pub expired_at: Option<DateTime<Utc>>,
+}
+
+/// The current episode, as edge resolution needs it: storage identity for
+/// attribution plus its event time (ISO 8601) as the timestamp-extraction
+/// reference.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EpisodeRef {
+    /// Storage identity (grit episode id).
+    pub id: String,
+    /// Event time, ISO 8601 (`datetime.isoformat()` form), if known.
+    pub valid_at: Option<String>,
 }

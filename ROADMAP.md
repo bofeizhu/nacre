@@ -101,10 +101,21 @@ increment. Conventions (binding for any agent working this file):
       dropped), empty-fact filter, lenient `fromisoformat`/`ensure_utc`
       timestamp parsing (chrono), raw-first-index reference_time semantics.
       DraftEdge/NodeRef/EdgeTypeSpec types in extract/mod.rs.
-- [ ] `dedupe/edges.rs`: edge dedup judgment (ports `edge_operations.py`).
-- [ ] `invalidate/`: temporal contradiction detection → `InvalidateEdge` ops
-      with event-time reasoning (ports `edge_operations.py` invalidation +
-      `temporal_operations`).
+- [x] `dedupe/edges.rs`: edge resolution — dedup judgment AND temporal
+      invalidation, ported together because upstream fuses them in
+      `resolve_extracted_edge`: verbatim fast path (endpoints + normalized
+      fact), LLM resolve_edge with continuous idx across related/existing
+      lists and invalid-id guardrails, timestamp extraction for new edges
+      (small model; failures swallowed like upstream), invalid_at→expired_at
+      rule, newer-candidate-expires-new-edge rule, and
+      `resolve_edge_contradictions`. Time injected via a `now` parameter.
+      This also covers the separate `invalidate/` roadmap item.
+- [ ] Custom edge-attribute extraction (pydantic edge models with fields →
+      `extract_edges.extract_attributes` + `apply_capped_attributes`) —
+      deferred from `dedupe/edges.rs`; not exercised by trace1. Port when a
+      trace or Layer 3 needs custom edge ontologies.
+- [x] `invalidate/`: folded into `dedupe/edges.rs` above (upstream keeps
+      dedup + invalidation in one function; splitting would hurt fidelity).
 - [ ] `summarize/`: node summary refresh (ports `summarize_nodes` usage).
 - [ ] `pipeline.rs`: `add_episode` seam stringing the steps, emitting +
       applying the `GraphOp` stream (ports `graphiti.py::add_episode`
