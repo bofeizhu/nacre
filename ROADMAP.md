@@ -393,10 +393,15 @@ motivates; core changes must not alter recorded requests.
       deterministic fixture); covers deltas, all five viz reads, search
       with provenance, and the fail-loudly replay-miss surface. Skip path
       verified by hiding index.js.
-- [ ] Live Node smoke (preapproved keys, same guardrails as the Rust
+- [x] Live Node smoke (preapproved keys, same guardrails as the Rust
       smoke): a script mirroring examples/live_smoke.rs through the
       bindings — ingest 3 turns via DeepSeek+Zhipu, print deltas, run
       queries. Proves the FFI end-to-end.
+      → done 2026-07-10, first live run: scripts/live-smoke.mjs (outside
+      test/, never in npm test). 3 turns ingested through the addon, all
+      three queries answered with correct top hits and provenance —
+      retrieval quality visibly better than the Rust smoke's since the
+      edge-only targets fix.
 - [ ] Viz starter artifact: `examples/viz/` — a script that dumps a smoke
       graph as JSON (nodes/edges with labels, validity, provenance) plus a
       minimal self-contained viewer.html (offline, no CDN) rendering it as
