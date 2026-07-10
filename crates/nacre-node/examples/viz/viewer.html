@@ -1,0 +1,379 @@
+<!doctype html>
+<!--
+  Minimal memory-graph viewer — a data-contract proof, not a product.
+  Self-contained: no CDN, no network, no build step. Renders graph.data.js
+  (written by dump-graph.mjs) as a force-directed graph with an as-of
+  event-time slider stub. The Electron app copies the data contract, not
+  this code.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>nacre — memory graph</title>
+<style>
+  :root {
+    --surface: #fcfcfb;
+    --page: #f9f9f7;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --hairline: #e1e0d9;
+    --baseline: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.1);
+    /* categorical slots, fixed order (validated reference palette) */
+    --c1: #2a78d6; --c2: #1baf7a; --c3: #eda100; --c4: #008300; --c5: #4a3aa7; --c6: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #1a1a19;
+      --page: #0d0d0d;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --hairline: #2c2c2a;
+      --baseline: #383835;
+      --border: rgba(255, 255, 255, 0.1);
+      --c1: #3987e5; --c2: #199e70; --c3: #c98500; --c4: #008300; --c5: #9085e9; --c6: #e66767;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 10px;
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header p { color: var(--ink-2); font-size: 12.5px; }
+  #controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 12.5px;
+    color: var(--ink-2);
+  }
+  #controls input[type="range"] { width: min(340px, 50vw); accent-color: var(--c1); }
+  #asofLabel { font-variant-numeric: tabular-nums; color: var(--ink); min-width: 15ch; }
+  #status { color: var(--muted); }
+  #legend { display: flex; gap: 12px; align-items: center; }
+  #legend .swatch { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+  #stage {
+    flex: 1;
+    min-height: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  svg { width: 100%; height: 100%; display: block; }
+  .edge { stroke: var(--baseline); stroke-width: 2; fill: none; }
+  .edge.gone { stroke: var(--hairline); stroke-dasharray: 5 4; }
+  .edge-hit { stroke: transparent; stroke-width: 14; fill: none; cursor: pointer; }
+  .edge-label { fill: var(--muted); font-size: 9.5px; pointer-events: none; }
+  .node circle { stroke: var(--surface); stroke-width: 2; cursor: grab; }
+  .node.ghost circle { fill: none; stroke: var(--muted); stroke-dasharray: 2 3; stroke-width: 1.5; }
+  .node text { fill: var(--ink-2); font-size: 11px; pointer-events: none; }
+  .node.ghost text { fill: var(--muted); font-style: italic; }
+  .merge-link { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 4; }
+  #tooltip {
+    position: fixed;
+    max-width: 340px;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    padding: 8px 10px;
+    font-size: 12px;
+    pointer-events: none;
+    display: none;
+    z-index: 10;
+  }
+  #tooltip .tt-title { font-weight: 600; }
+  #tooltip .tt-dim { color: var(--muted); }
+  #tooltip p { margin-top: 3px; color: var(--ink-2); }
+  #error { color: var(--c6); padding: 24px; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>nacre memory graph <span id="group" style="color:var(--muted);font-weight:400"></span></h1>
+  <p id="meta">Entities and facts from the read-path contract: nodesInGroup · edgesInGroup · episodesInGroup · mentionsOf.</p>
+</header>
+<div id="controls">
+  <label for="asof">as-of (event time)</label>
+  <input id="asof" type="range" min="0" max="1000" value="1000" />
+  <span id="asofLabel"></span>
+  <label><input id="drafts" type="checkbox" /> show merged-away drafts</label>
+  <span id="legend"></span>
+  <span id="status"></span>
+</div>
+<div id="stage"><svg id="svg" role="img" aria-label="force-directed memory graph"></svg></div>
+<div id="tooltip"></div>
+<script src="graph.data.js"></script>
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+if (!window.NACRE_GRAPH) {
+  $('stage').innerHTML =
+    '<div id="error">graph.data.js not found or empty — run <code>node examples/viz/dump-graph.mjs</code> first (requires the addon: <code>npm run build</code>).</div>';
+  throw new Error('no graph data');
+}
+const G = window.NACRE_GRAPH;
+const T = (iso) => (iso ? Date.parse(iso) : null);
+const fmt = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16) + 'Z';
+
+$('group').textContent = '· group "' + G.groupId + '"';
+const episodesById = new Map(G.episodes.map((e) => [e.id, e]));
+
+// --- categorical color by primary label, slots assigned in fixed sorted order ---
+const primaryLabel = (n) => n.labels.find((l) => l !== 'Entity') || 'Entity';
+const labels = [...new Set(G.nodes.filter((n) => !n.expiredAt).map(primaryLabel))].sort();
+const SLOTS = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6'];
+const colorOf = (n) => {
+  const i = labels.indexOf(primaryLabel(n));
+  return i >= 0 && i < SLOTS.length ? `var(${SLOTS[i]})` : 'var(--muted)';
+};
+if (labels.length >= 2) {
+  $('legend').innerHTML = labels
+    .map((l, i) => `<span><span class="swatch" style="background:var(${SLOTS[Math.min(i, SLOTS.length - 1)]})"></span>${l}</span>`)
+    .join('');
+}
+
+// --- simulation state ---
+const liveNodes = G.nodes.filter((n) => !n.expiredAt);
+const ghostNodes = G.nodes.filter((n) => n.expiredAt);
+let showGhosts = false;
+let simNodes = [];
+let simEdges = [];
+let mergeLinks = [];
+const pos = new Map(); // id -> {x, y, vx, vy, fixed}
+
+// deterministic initial placement: a circle, seeded by index. The stage can
+// measure 0×0 if the page is laid out late (hidden tab) — seed against a
+// fallback and let the ResizeObserver below re-place once real size arrives.
+let placedForReal = false;
+function place(nodes) {
+  const s = $('stage');
+  placedForReal = s.clientWidth > 0 && s.clientHeight > 0;
+  const W = s.clientWidth || 800, H = s.clientHeight || 600;
+  nodes.forEach((n, i) => {
+    if (pos.has(n.id)) return;
+    const a = (i / nodes.length) * 2 * Math.PI;
+    pos.set(n.id, { x: W / 2 + Math.cos(a) * H * 0.32, y: H / 2 + Math.sin(a) * H * 0.32, vx: 0, vy: 0, fixed: false });
+  });
+}
+new ResizeObserver(() => {
+  if (!placedForReal && $('stage').clientWidth > 0) { pos.clear(); rebuild(); }
+  alpha = Math.max(alpha, 0.3);
+}).observe($('stage'));
+
+function rebuild() {
+  simNodes = showGhosts ? [...liveNodes, ...ghostNodes] : liveNodes;
+  const present = new Set(simNodes.map((n) => n.id));
+  simEdges = G.edges.filter((e) => !e.expiredAt && present.has(e.sourceId) && present.has(e.targetId));
+  mergeLinks = showGhosts
+    ? ghostNodes.filter((n) => n.mergedInto && present.has(n.mergedInto)).map((n) => ({ from: n.id, to: n.mergedInto }))
+    : [];
+  place(simNodes);
+  render();
+  alpha = 1;
+}
+
+// --- as-of slider over the event-time span ---
+const times = [
+  ...G.edges.flatMap((e) => [T(e.validAt), T(e.invalidAt)]),
+  ...G.episodes.map((e) => T(e.occurredAt)),
+].filter((t) => t != null);
+const tMin = Math.min(...times), tMax = Math.max(...times) + 60_000;
+const sliderTime = () => tMin + ($('asof').value / 1000) * (tMax - tMin);
+
+// edge state at event time t: hidden (not yet true), gone (invalidated), or current
+function edgeState(e, t) {
+  const v = T(e.validAt), inv = T(e.invalidAt);
+  if (v != null && v > t) return 'hidden';
+  if (inv != null && inv <= t) return 'gone';
+  return 'current';
+}
+
+// --- svg scaffolding ---
+const svg = $('svg');
+const NS = 'http://www.w3.org/2000/svg';
+const layer = (name) => { const g = document.createElementNS(NS, 'g'); g.id = name; svg.appendChild(g); return g; };
+const edgeLayer = layer('edges'), mergeLayer = layer('merges'), nodeLayer = layer('nodes');
+const tooltip = $('tooltip');
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function showTip(html, ev) {
+  tooltip.innerHTML = html;
+  tooltip.style.display = 'block';
+  const x = Math.min(ev.clientX + 14, innerWidth - 360);
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = Math.min(ev.clientY + 12, innerHeight - 140) + 'px';
+}
+const hideTip = () => (tooltip.style.display = 'none');
+
+function nodeTip(n) {
+  const merged = n.mergedInto ? `<p class="tt-dim">merged into ${esc((G.nodes.find((m) => m.id === n.mergedInto) || {}).name || n.mergedInto)}</p>` : '';
+  return `<div class="tt-title">${esc(n.name)}</div>
+    <div class="tt-dim">${esc(n.labels.join(' · '))} · created ${fmt(T(n.createdAt))}</div>
+    ${n.summary ? `<p>${esc(n.summary)}</p>` : ''}${merged}`;
+}
+function edgeTip(e) {
+  const window_ = `${e.validAt ? fmt(T(e.validAt)) : '…'} → ${e.invalidAt ? fmt(T(e.invalidAt)) : 'present'}`;
+  const prov = (e.episodes || [])
+    .map((id) => episodesById.get(id))
+    .filter(Boolean)
+    .map((ep) => `${esc(ep.source)} @ ${fmt(T(ep.occurredAt))}`)
+    .join('<br>');
+  return `<div class="tt-title">${esc(e.name)}</div>
+    <p>${esc(e.fact)}</p>
+    <div class="tt-dim">valid ${window_}</div>
+    ${prov ? `<div class="tt-dim">episodes:<br>${prov}</div>` : ''}`;
+}
+
+// --- render (build elements once per rebuild; positions updated per tick) ---
+let edgeEls = [], mergeEls = [], nodeEls = [];
+function render() {
+  edgeLayer.textContent = mergeLayer.textContent = nodeLayer.textContent = '';
+  edgeEls = simEdges.map((e) => {
+    const line = document.createElementNS(NS, 'line');
+    line.setAttribute('class', 'edge');
+    const hit = document.createElementNS(NS, 'line');
+    hit.setAttribute('class', 'edge-hit');
+    hit.addEventListener('mousemove', (ev) => showTip(edgeTip(e), ev));
+    hit.addEventListener('mouseleave', hideTip);
+    const label = document.createElementNS(NS, 'text');
+    label.setAttribute('class', 'edge-label');
+    label.setAttribute('text-anchor', 'middle');
+    label.textContent = e.name;
+    edgeLayer.append(line, hit, label);
+    return { e, line, hit, label };
+  });
+  mergeEls = mergeLinks.map((l) => {
+    const line = document.createElementNS(NS, 'line');
+    line.setAttribute('class', 'merge-link');
+    mergeLayer.appendChild(line);
+    return { l, line };
+  });
+  nodeEls = simNodes.map((n) => {
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('class', 'node' + (n.expiredAt ? ' ghost' : ''));
+    const c = document.createElementNS(NS, 'circle');
+    c.setAttribute('r', 9);
+    if (!n.expiredAt) c.setAttribute('fill', colorOf(n));
+    const t = document.createElementNS(NS, 'text');
+    t.setAttribute('dx', 13);
+    t.setAttribute('dy', 4);
+    t.textContent = n.name;
+    g.append(c, t);
+    g.addEventListener('mousemove', (ev) => { if (!drag) showTip(nodeTip(n), ev); });
+    g.addEventListener('mouseleave', hideTip);
+    g.addEventListener('mousedown', (ev) => { drag = { id: n.id }; ev.preventDefault(); hideTip(); });
+    nodeLayer.appendChild(g);
+    return { n, g, c };
+  });
+  applyTime();
+}
+
+function applyTime() {
+  const t = sliderTime();
+  $('asofLabel').textContent = fmt(t);
+  let current = 0, gone = 0, hidden = 0;
+  for (const { e, line, hit, label } of edgeEls) {
+    const s = edgeState(e, t);
+    if (s === 'current') current++; else if (s === 'gone') gone++; else hidden++;
+    const vis = s === 'hidden' ? 'none' : '';
+    line.style.display = hit.style.display = label.style.display = vis;
+    line.setAttribute('class', s === 'gone' ? 'edge gone' : 'edge');
+  }
+  $('status').textContent = `${current} current · ${gone} invalidated · ${hidden} not yet stated`;
+}
+
+// --- tiny force simulation (velocity Verlet; O(n²) repulsion is fine at this scale) ---
+let alpha = 1, drag = null;
+function tick() {
+  const W = $('stage').clientWidth, H = $('stage').clientHeight;
+  if (alpha > 0.003) {
+    for (let i = 0; i < simNodes.length; i++) {
+      const pa = pos.get(simNodes[i].id);
+      for (let j = i + 1; j < simNodes.length; j++) {
+        const pb = pos.get(simNodes[j].id);
+        let dx = pa.x - pb.x, dy = pa.y - pb.y;
+        if (dx * dx + dy * dy < 1) {
+          // exact overlap has no repulsion direction — pick one deterministically
+          const jitter = ((i * 37 + j * 101) % 360) * (Math.PI / 180);
+          dx = Math.cos(jitter); dy = Math.sin(jitter);
+        }
+        const d2 = Math.max(dx * dx + dy * dy, 100);
+        const f = (2600 / d2) * alpha;
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        dx /= d; dy /= d;
+        pa.vx += dx * f; pa.vy += dy * f;
+        pb.vx -= dx * f; pb.vy -= dy * f;
+      }
+      pa.vx += (W / 2 - pa.x) * 0.004 * alpha;
+      pa.vy += (H / 2 - pa.y) * 0.004 * alpha;
+    }
+    const springs = [...simEdges.map((e) => [e.sourceId, e.targetId]), ...mergeLinks.map((l) => [l.from, l.to])];
+    for (const [s, d] of springs) {
+      const ps = pos.get(s), pd = pos.get(d);
+      const dx = pd.x - ps.x, dy = pd.y - ps.y;
+      const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
+      const f = ((dist - 120) / dist) * 0.04 * alpha;
+      ps.vx += dx * f; ps.vy += dy * f;
+      pd.vx -= dx * f; pd.vy -= dy * f;
+    }
+    for (const n of simNodes) {
+      const p = pos.get(n.id);
+      if (p.fixed) { p.vx = p.vy = 0; continue; }
+      p.vx *= 0.85; p.vy *= 0.85;
+      p.x = Math.min(Math.max(p.x + p.vx, 20), W - 20);
+      p.y = Math.min(Math.max(p.y + p.vy, 16), H - 16);
+    }
+    alpha *= 0.995;
+  }
+  for (const { e, line, hit, label } of edgeEls) {
+    const s = pos.get(e.sourceId), d = pos.get(e.targetId);
+    for (const el of [line, hit]) {
+      el.setAttribute('x1', s.x); el.setAttribute('y1', s.y);
+      el.setAttribute('x2', d.x); el.setAttribute('y2', d.y);
+    }
+    label.setAttribute('x', (s.x + d.x) / 2);
+    label.setAttribute('y', (s.y + d.y) / 2 - 5);
+  }
+  for (const { l, line } of mergeEls) {
+    const s = pos.get(l.from), d = pos.get(l.to);
+    line.setAttribute('x1', s.x); line.setAttribute('y1', s.y);
+    line.setAttribute('x2', d.x); line.setAttribute('y2', d.y);
+  }
+  for (const { n, g } of nodeEls) {
+    const p = pos.get(n.id);
+    g.setAttribute('transform', `translate(${p.x},${p.y})`);
+  }
+  requestAnimationFrame(tick);
+}
+
+svg.addEventListener('mousemove', (ev) => {
+  if (!drag) return;
+  const r = svg.getBoundingClientRect();
+  const p = pos.get(drag.id);
+  p.x = ev.clientX - r.left; p.y = ev.clientY - r.top;
+  p.fixed = true;
+  alpha = Math.max(alpha, 0.3);
+});
+addEventListener('mouseup', () => (drag = null));
+$('asof').addEventListener('input', applyTime);
+$('drafts').addEventListener('change', (ev) => { showGhosts = ev.target.checked; rebuild(); });
+addEventListener('resize', () => (alpha = Math.max(alpha, 0.3)));
+
+rebuild();
+tick();
+</script>
+</body>
+</html>

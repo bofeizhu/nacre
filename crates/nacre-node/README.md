@@ -23,3 +23,13 @@ Generated artifacts (`*.node`, `index.js`, `index.d.ts`) and
 `node_modules/` are gitignored; `package.json` + `package-lock.json` are
 committed. The plain `cargo test --workspace` gate passes with no Node
 toolchain installed — the addon is packaged only by `@napi-rs/cli`.
+
+## Try it
+
+- `npm test` — offline Node-side tests (replays the committed golden
+  trace; skips loudly if the addon isn't built).
+- [`examples/viz/`](examples/viz/README.md) — a self-contained
+  memory-graph viewer proving the read-path data contract (dump script +
+  `viewer.html` with an as-of time slider).
+- `scripts/live-smoke.mjs` — live end-to-end smoke (requires API keys;
+  never runs in `npm test`).

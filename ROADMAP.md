@@ -402,11 +402,21 @@ motivates; core changes must not alter recorded requests.
       three queries answered with correct top hits and provenance —
       retrieval quality visibly better than the Rust smoke's since the
       edge-only targets fix.
-- [ ] Viz starter artifact: `examples/viz/` — a script that dumps a smoke
+- [x] Viz starter artifact: `examples/viz/` — a script that dumps a smoke
       graph as JSON (nodes/edges with labels, validity, provenance) plus a
       minimal self-contained viewer.html (offline, no CDN) rendering it as
       a force-directed graph with an as-of time slider stub. Not a
       product — a data-contract proof the Electron app can copy from.
+      → done 2026-07-11 (nacre-node/examples/viz/): dump-graph.mjs
+      replay-ingests trace1 through the addon (offline) and writes
+      graph.json + graph.data.js (script-src wrapper so file:// works —
+      browsers block fetch there); viewer.html is a zero-dependency force
+      layout with hover tooltips (fact, validity window, provenance
+      episodes via mentionsOf), an as-of event-time slider (not-yet /
+      current / invalidated), and an audit toggle rendering merged-away
+      drafts as ghosts dotted to mergedInto. Sample data committed so the
+      viewer renders from a bare checkout. Verified in-browser both
+      color schemes; README documents the five-call data contract.
 - [ ] Golden trace #2: text/json episode sources — the doc-ingestion bet
       for Layer 3. Curate `oracle/episodes/trace2.json` (a text document
       chunk + a json event episode alongside a message turn; 3-4 episodes,
