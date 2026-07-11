@@ -216,4 +216,42 @@ mod tests {
         drop(grit);
         let _ = std::fs::remove_file(&path);
     }
+
+    /// CJK word queries reach facts through grit's trigram leg (grit
+    /// ≥0.2.3). The stub embedder contributes no meaningful vector
+    /// signal, so a hit here proves the KEYWORD path alone carries Han
+    /// text — before the trigram leg this exact query returned nothing.
+    #[tokio::test]
+    async fn cjk_word_query_returns_edges() {
+        let (grit, path) = open_grit("search-cjk.db");
+        add_fact(
+            &grit,
+            "g1",
+            "李雷",
+            "字节跳动",
+            "李雷在字节跳动担任数据工程师",
+        );
+        add_fact(
+            &grit,
+            "g1",
+            "韩梅梅",
+            "清华大学",
+            "韩梅梅在清华大学教授统计学",
+        );
+
+        let hits = search_edges(&grit, &StubEmbedder, "字节跳动", "g1", 10)
+            .await
+            .unwrap();
+        assert_eq!(hits.len(), 1, "only the matching fact: {hits:?}");
+        assert_eq!(hits[0].fact, "李雷在字节跳动担任数据工程师");
+
+        let hits = search_edges(&grit, &StubEmbedder, "统计学", "g1", 10)
+            .await
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].fact, "韩梅梅在清华大学教授统计学");
+
+        drop(grit);
+        let _ = std::fs::remove_file(&path);
+    }
 }

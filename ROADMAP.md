@@ -641,13 +641,19 @@ override in nacre (`cargo update -p grit-core`), publish is BLOCKED(user).
       runs (跳动 in 字节跳动) remain unmatchable. The v4 fixture's CJK
       content is asserted reachable through the public search API
       post-freeze. Gate green, 49 tests.
-- [ ] nacre: conformance green against the patched grit (recorded
+- [x] nacre: conformance green against the patched grit (recorded
       requests must not move — retrieval is grit-internal; the replay
       asserts are hits-non-empty, which fusion preserves). Add a CJK
       retrieval test in nacre's search module: Chinese fact ingested,
       Chinese word query returns it through search_edges with the stub
       embedder (proving the FTS leg alone carries CJK). Update the
       "Later" CJK entry → resolved pointer to this milestone.
+      → done 2026-07-11: override wired (grit-core 0.2.3 via path),
+      conformance green on BOTH traces first run — zero recorded-request
+      movement. New test: two Chinese facts, word queries 字节跳动 and
+      统计学 each return exactly their fact through search_edges with
+      the stub embedder — keyword path alone, no vector signal. Full
+      gate + addon rebuild + Node tests + pytest all green.
 - [ ] Verify on the real dogfood graph: one Chinese keyword probe
       (e.g. 随机过程) against ~/.hermes/nacre/memory.db through the
       patched stack — the leg must surface the OCR-project facts that
