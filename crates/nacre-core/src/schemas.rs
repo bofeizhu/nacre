@@ -268,6 +268,43 @@ pub struct SummaryDescription {
 }
 response_schema!(SummaryDescription);
 
+/// Validate a raw model response against the registered schema's Rust
+/// model — a full serde decode, not a key-presence check. Prompt-only
+/// providers (DeepSeek schema-in-prompt) sometimes return the right keys
+/// with the wrong value types (observed live: `extracted_entities` as a
+/// map instead of a sequence); the pipeline's later `decode_response`
+/// would fail, so clients validate here and burn a retry instead.
+/// Unknown schema names pass (mirrors the client registry's leniency).
+// ports: the response-model validation both upstream clients and
+// oracle/recording_clients.py perform before accepting a response
+pub fn validate_response(schema_name: &str, value: &serde_json::Value) -> Result<(), String> {
+    fn check<T: DeserializeOwned>(value: &serde_json::Value) -> Result<(), String> {
+        serde_json::from_value::<T>(value.clone())
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+    match schema_name {
+        "ExtractedEntity" => check::<ExtractedEntity>(value),
+        "ExtractedEntities" => check::<ExtractedEntities>(value),
+        "EntitySummary" => check::<EntitySummary>(value),
+        "SummarizedEntity" => check::<SummarizedEntity>(value),
+        "SummarizedEntities" => check::<SummarizedEntities>(value),
+        "Edge" => check::<Edge>(value),
+        "ExtractedEdges" => check::<ExtractedEdges>(value),
+        "EdgeTimestamps" => check::<EdgeTimestamps>(value),
+        "BatchEdgeTimestamps" => check::<BatchEdgeTimestamps>(value),
+        "NodeDuplicate" => check::<NodeDuplicate>(value),
+        "NodeResolutions" => check::<NodeResolutions>(value),
+        "EdgeDuplicate" => check::<EdgeDuplicate>(value),
+        "CombinedEntity" => check::<CombinedEntity>(value),
+        "CombinedFact" => check::<CombinedFact>(value),
+        "CombinedExtraction" => check::<CombinedExtraction>(value),
+        "Summary" => check::<Summary>(value),
+        "SummaryDescription" => check::<SummaryDescription>(value),
+        _ => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -418,5 +455,25 @@ mod tests {
         let typed: ExtractedEntities =
             crate::model::decode_response(value, ExtractedEntities::NAME).unwrap();
         assert!(typed.extracted_entities.is_empty());
+    }
+
+    #[test]
+    fn validate_response_catches_wrong_typed_values() {
+        // The live-smoke failure shape: right key, map instead of sequence.
+        let bad = json!({"extracted_entities": {"name": "Waffle", "entity_type_id": 0}});
+        let err = validate_response("ExtractedEntities", &bad).unwrap_err();
+        assert!(err.contains("invalid type"), "{err}");
+
+        let good = json!({"extracted_entities": [
+            {"name": "Waffle", "entity_type_id": 0, "episode_indices": [0]}
+        ]});
+        validate_response("ExtractedEntities", &good).unwrap();
+
+        // Key-presence checks would pass this; full decode must not.
+        let wrong_inner = json!({"duplicates": [{"id": "not-an-int"}]});
+        assert!(validate_response("NodeResolutions", &wrong_inner).is_err());
+
+        // Unregistered names stay lenient, mirroring the client registry.
+        validate_response("SomeFutureSchema", &json!({"anything": 1})).unwrap();
     }
 }

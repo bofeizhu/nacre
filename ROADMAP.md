@@ -537,11 +537,29 @@ coded against in the provider README.
       grepping — ran it: symlink created, 'nacre' discovered,
       `hermes memory status` still shows "(none — built-in only)".
       Installed on this machine, awaiting user activation.
-- [ ] Live smoke (preapproved terms): drive the provider code path
+- [x] Live smoke (preapproved terms): drive the provider code path
       outside Hermes — spawn the real sidecar with oracle/.env keys,
       sync_turn 3 synthetic conversation turns, assert episodes/nodes/
       edges landed, dump with examples/viz and eyeball. Budget ~3 runs;
       BLOCKED(findings) if it isn't working within that.
+      → done 2026-07-11 in 2 live runs (integrations/hermes/live_smoke.py,
+      never run by pytest). Run 1 surfaced a REAL robustness gap:
+      DeepSeek returned `extracted_entities` as a map (right key, wrong
+      value type) — the SchemaInPrompt key-presence check passed, no
+      retry fired, decode_response failed downstream. Fixed in nacre-core
+      the way the Python oracle already had to: `schemas::
+      validate_response` (full serde decode against the response model)
+      now gates SchemaInPrompt responses, and a failed validation appends
+      upstream's error-context user message before retrying (blind
+      retries at deterministic temperature reproduce the same bad shape;
+      ports openai_base_client.py's correction loop). Run 2: all 3 turns
+      clean — dedup merges each turn, and the vet-switch invalidation
+      FIRED (Dr. Ilse Braun HAS_VET invalidated; queries return Dr. Marco
+      Reyes as current). Viz dump of the captured graph verified in the
+      browser (dump-graph.mjs gained --db/--group for existing graphs).
+      Dogfood observations for the Stage-2 review: a duplicate
+      adoption-fact edge (possible draft-edge dedup miss) and "user" as
+      an entity name (set user_label/assistant_label at activation).
 - [ ] BLOCKED(user: activate + dogfood) — run `hermes memory setup`,
       select nacre, chat normally for 2+ weeks, then offline review
       (viz + manual searchEdges) decides Stage 2 (prefetch/recall tools).

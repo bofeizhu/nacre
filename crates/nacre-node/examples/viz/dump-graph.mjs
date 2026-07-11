@@ -5,7 +5,12 @@
 // nodes (labels, bi-temporal fields), edges (validity, provenance
 // episode ids via mentionsOf), and episodes.
 //
-// Usage: node examples/viz/dump-graph.mjs   (after `npm run build`)
+// Usage: node examples/viz/dump-graph.mjs                    (after `npm run build`)
+//        node examples/viz/dump-graph.mjs --db <path> --group <id>
+//
+// Default: replay-ingest trace1 into a temp db and dump it. With --db,
+// dump an EXISTING graph instead (e.g. one captured by the Hermes
+// provider) — no ingestion, no recordings needed.
 //
 // Writes, next to this script:
 //   graph.json     — the pure data contract (committed as a sample)
@@ -19,6 +24,24 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '..', '..');
 const { Memory } = await import(path.join(root, 'index.js'));
+
+const args = process.argv.slice(2);
+const argOf = (flag) => {
+  const i = args.indexOf(flag);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const existingDb = argOf('--db');
+const existingGroup = argOf('--group');
+if (existingDb && !existingGroup) {
+  console.error('--db requires --group <group id>');
+  process.exit(1);
+}
+
+if (existingDb) {
+  const m = Memory.open(existingDb, 'viz-dump');
+  writeGraph(m, existingGroup, `existing graph (${existingDb})`);
+  process.exit(0);
+}
 
 const oracle = path.join(root, '..', '..', 'oracle');
 const fixtures = path.join(oracle, 'fixtures', 'trace1');
@@ -48,24 +71,26 @@ for (const ep of spec.episodes) {
   );
 }
 
-// Full bi-temporal rows — the viewer decides what to show (live view vs
-// audit view). Edge provenance comes from mentionsOf, per the contract.
-const graph = {
-  groupId: spec.group_id,
-  source: 'trace1 replay (oracle/fixtures/trace1)',
-  nodes: m.nodesInGroup(spec.group_id),
-  edges: m.edgesInGroup(spec.group_id).map((e) => ({ ...e, episodes: m.mentionsOf(e.id) })),
-  episodes: m.episodesInGroup(spec.group_id),
-};
-
-const json = JSON.stringify(graph, null, 1);
-fs.writeFileSync(path.join(here, 'graph.json'), json + '\n');
-fs.writeFileSync(path.join(here, 'graph.data.js'), `window.NACRE_GRAPH = ${json};\n`);
+writeGraph(m, spec.group_id, 'trace1 replay (oracle/fixtures/trace1)');
 fs.unlinkSync(dbPath);
 
-const live = graph.nodes.filter((n) => !n.expiredAt).length;
-console.log(
-  `\nwrote graph.json + graph.data.js: ${graph.nodes.length} nodes (${live} live), ` +
-    `${graph.edges.length} edges, ${graph.episodes.length} episodes`,
-);
-console.log('open viewer.html in a browser to see it');
+// Full bi-temporal rows — the viewer decides what to show (live view vs
+// audit view). Edge provenance comes from mentionsOf, per the contract.
+function writeGraph(memory, groupId, sourceLabel) {
+  const graph = {
+    groupId,
+    source: sourceLabel,
+    nodes: memory.nodesInGroup(groupId),
+    edges: memory.edgesInGroup(groupId).map((e) => ({ ...e, episodes: memory.mentionsOf(e.id) })),
+    episodes: memory.episodesInGroup(groupId),
+  };
+  const json = JSON.stringify(graph, null, 1);
+  fs.writeFileSync(path.join(here, 'graph.json'), json + '\n');
+  fs.writeFileSync(path.join(here, 'graph.data.js'), `window.NACRE_GRAPH = ${json};\n`);
+  const live = graph.nodes.filter((n) => !n.expiredAt).length;
+  console.log(
+    `\nwrote graph.json + graph.data.js: ${graph.nodes.length} nodes (${live} live), ` +
+      `${graph.edges.length} edges, ${graph.episodes.length} episodes`,
+  );
+  console.log('open viewer.html in a browser to see it');
+}

@@ -338,7 +338,11 @@ fn salvage_shape(value: Value, required: &[String]) -> Value {
 
 impl LanguageModel for ClaudeModel {
     async fn complete(&self, request: &CompletionRequest) -> Result<Value, ModelError> {
-        let body = build_request_body(
+        // `body` is mutated across attempts in SchemaInPrompt mode: a failed
+        // schema validation appends an error-context user message so the
+        // retry can correct itself (blind retries at deterministic
+        // temperature just reproduce the same bad shape).
+        let mut body = build_request_body(
             request,
             self.model_for(request.model_size),
             self.config.structured_output,
@@ -366,18 +370,36 @@ impl LanguageModel for ClaudeModel {
                     if !retryable {
                         let parsed = parse_response_body(&value)?;
                         // Prompt-only schema conformance is best-effort:
-                        // validate the top-level shape and burn a retry on
-                        // a miss instead of failing the pipeline.
+                        // salvage known bad shapes, then validate the FULL
+                        // response model (key presence alone misses
+                        // wrong-typed values). On a miss, feed the error
+                        // back as a user message and burn a retry — the
+                        // upstream clients' correction loop.
+                        // ports: openai_base_client.py::_generate_response_with_retry
                         if self.config.structured_output == StructuredOutput::SchemaInPrompt {
                             let required = required_keys(&request.schema_name);
                             let parsed = salvage_shape(parsed, &required);
-                            if required.iter().all(|k| parsed.get(k.as_str()).is_some()) {
-                                return Ok(parsed);
+                            match crate::schemas::validate_response(&request.schema_name, &parsed) {
+                                Ok(()) => return Ok(parsed),
+                                Err(e) => {
+                                    last_error = format!(
+                                        "response did not validate against schema {}: {e}",
+                                        request.schema_name
+                                    );
+                                    let error_context = format!(
+                                        "The previous response attempt was invalid. \
+                                         Error type: ValidationError. \
+                                         Error details: {e}. \
+                                         Please try again with a valid response, ensuring the \
+                                         output matches the expected format and constraints."
+                                    );
+                                    if let Some(messages) = body["messages"].as_array_mut() {
+                                        messages.push(
+                                            json!({"role": "user", "content": error_context}),
+                                        );
+                                    }
+                                }
                             }
-                            last_error = format!(
-                                "response missing required keys {required:?} for schema {}",
-                                request.schema_name
-                            );
                         } else {
                             return Ok(parsed);
                         }
