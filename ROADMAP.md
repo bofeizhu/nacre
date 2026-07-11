@@ -629,6 +629,16 @@ Electron app demonstrates the need, or on user say-so):
       dual-index scheme — trigram changes English matching behavior, so
       it can't be a drop-in swap. Pipeline/storage/embedding are already
       fully CJK-capable (trace1 ep-4's Japanese replays byte-exact).
+- [ ] Doc chunking (decided 2026-07-11): port upstream's
+      `utils/content_chunking.py` as a pure `nacre::chunking` module +
+      an `addDocument`/`chunkContent` surface in the bindings — when
+      Layer 3 doc ingestion arrives. At the pin the upstream module is
+      complete but DORMANT (nothing in add_episode calls it; only its
+      tests import it), so `add_episode` stays 1-in-1-out and
+      oracle-verifiable; chunking mechanism lives in nacre, invocation
+      policy at the harness boundary. If a future pin wires it into
+      add_episode, follow with a golden trace. (Hermes Stage 1 needs at
+      most a sync_turn length cap for pasted-file turns.)
 - Search cross-encoder reranking evaluation.
 - Communities-equivalent topic rollups, designed natively (not a port).
 - [x] crates.io publish of nacre-core — done 2026-07-11 (user-approved):
