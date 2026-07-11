@@ -1,0 +1,12 @@
+[project]
+name = "nacre-hermes-integration"
+version = "0.1.0"
+description = "Tests for the nacre Hermes memory provider (the plugin itself is dependency-free)"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

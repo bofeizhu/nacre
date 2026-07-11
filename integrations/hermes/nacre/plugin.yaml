@@ -1,0 +1,5 @@
+name: nacre
+version: 0.1.0
+description: "nacre — local bi-temporal memory graph (grit/SQLite) with LLM extraction, dedup, and temporal invalidation. Stage 1: capture-only (no recall, zero session influence)."
+pip_dependencies: []
+requires_env: []

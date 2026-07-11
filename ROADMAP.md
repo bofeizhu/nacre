@@ -496,7 +496,7 @@ coded against in the provider README.
       miss and unknown-method both come back as {id, error}, clean exit
       verified. Green first run. Note: a stale nvm default (v16) shadowed
       Node 24 in fresh shells — tests need the v24 bin on PATH.
-- [ ] Hermes provider shim: `integrations/hermes/nacre/` — a
+- [x] Hermes provider shim: `integrations/hermes/nacre/` — a
       MemoryProvider implementation (capture-only): `initialize` spawns +
       supervises the sidecar (env-passed keys, hermes_home-scoped db
       path, group per agent_workspace); `sync_turn` formats
@@ -509,6 +509,20 @@ coded against in the provider README.
       `backup_paths` for the db file. Offline pytest (uv project under
       integrations/hermes/) against a replay-mode sidecar, with a stubbed
       `agent.memory_provider` ABC so tests run outside Hermes.
+      → done 2026-07-11: zero pip dependencies (stdlib only — the plugin
+      needs no `hermes memory` pip install step); config at
+      $HERMES_HOME/nacre.json (mem0 convention), db at
+      $HERMES_HOME/nacre/memory.db so `hermes backup` covers it
+      (backup_paths → []); bounded queue (256, drop-oldest on overflow);
+      clock injectable for deterministic tests. 6 pytest cases green:
+      replay end-to-end through the REAL sidecar (trace1 deltas + stats +
+      sidecar-level search), breaker opens after 3 strikes and sync_turn
+      stays a silent no-op, non-primary context never spawns, Stage-1
+      surface invisible (no prompt block, no tools, empty prefetch),
+      episode formatting, config-schema/save_config contract (secrets
+      env-only, never written back). on_session_switch stays the ABC
+      no-op — Stage 1 keeps no per-session state (one group, episodes
+      stamped by wall clock).
 - [ ] Provider README + install: integrations/hermes/README.md — what
       Stage 1 does and deliberately does not do, key setup, the staged
       rollout plan, kill switches (`hermes memory off`, delete the db

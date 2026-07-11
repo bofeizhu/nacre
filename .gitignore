@@ -17,3 +17,5 @@ crates/nacre-node/node_modules/
 crates/nacre-node/*.node
 crates/nacre-node/index.js
 crates/nacre-node/index.d.ts
+integrations/hermes/.venv/
+.pytest_cache/
