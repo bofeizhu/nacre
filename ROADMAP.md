@@ -572,9 +572,20 @@ coded against in the provider README.
       signature inspection, `on_session_end` + `shutdown_all` teardown.
       Replay mode, offline, ep-0 deltas exact. Read agent_init.py's
       activation block line-by-line: config `memory.provider` → loader →
-      is_available → the exact call sequence the test replicates. The
-      only seam not exercised is the literal chat loop above
-      MemoryManager — that is what activation itself proves.
+      is_available → the exact call sequence the test replicates.
+      → The literal chat loop was then ALSO proven live (user-requested,
+      2026-07-11): a real `hermes --cli -z` session in a SANDBOXED
+      HERMES_HOME (config.yaml `memory.provider: nacre`; the user's real
+      Hermes verified untouched — still "(none — built-in only)").
+      deepseek-v4-pro answered; Hermes's own agent_init activated the
+      provider; sync_all fired on turn completion; the one-shot exit's
+      teardown flushed the ingestion queue (shutdown's 30s flush holds
+      the process — no lost turn). Captured graph: 1 episode, 6 live
+      nodes, 4 edges; `hermes memory status` in the sandbox shows
+      "nacre ← active, available ✓"; live searchEdges answers both
+      probe queries correctly, and the configured user_label meant the
+      sibling fact reads "Bofei is the sibling of Lena Zhu" — no "user"
+      entity.
 - [ ] BLOCKED(user: activate + dogfood) — run `hermes memory setup`,
       select nacre, chat normally for 2+ weeks, then offline review
       (viz + manual searchEdges) decides Stage 2 (prefetch/recall tools).
