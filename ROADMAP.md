@@ -619,6 +619,16 @@ Electron app demonstrates the need, or on user say-so):
       to FalkorDB) — it measures the architecture difference
       (in-process SQLite vs out-of-process graph DB), not tuned Python;
       real ingestion is LLM-dominated either way.
+- [ ] CJK keyword retrieval (grit): FTS5's default unicode61 tokenizer
+      does not segment Han text — measured 2026-07-11: a stored
+      `李雷在字节跳动担任数据工程师` gets 0 FTS hits for `字节跳动` —
+      so hybrid search degrades to vector-only for Chinese/Japanese
+      content (Zhipu embedding-3 carries recall well, but exact-token
+      matching is lost). Fix is a deliberate grit design increment:
+      FTS5 `trigram` tokenizer (pinned SQLite 3.53.2 supports it) or a
+      dual-index scheme — trigram changes English matching behavior, so
+      it can't be a drop-in swap. Pipeline/storage/embedding are already
+      fully CJK-capable (trace1 ep-4's Japanese replays byte-exact).
 - Search cross-encoder reranking evaluation.
 - Communities-equivalent topic rollups, designed natively (not a port).
 - [x] crates.io publish of nacre-core — done 2026-07-11 (user-approved):
