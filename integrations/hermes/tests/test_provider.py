@@ -124,6 +124,20 @@ def test_default_episode_format(plugin):
     assert p._format_episode("hi", "yo") == "Bofei: hi\nHermes: yo"
 
 
+def test_is_available_rejects_old_node(plugin, replay_env, tmp_path, monkeypatch):
+    # A fake node that reports v16: is_available must say no, so
+    # `hermes memory status` tells the truth about the env.
+    fake = tmp_path / "node"
+    fake.write_text("#!/bin/sh\necho v16.7.0\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    (tmp_path / "nacre.json").write_text(json.dumps({"node_bin": str(fake)}))
+    p = plugin.NacreMemoryProvider()
+    assert not p.is_available(), "v16 node must fail availability"
+    assert plugin._node_major(str(fake)) == 16
+    assert plugin._node_major("/nonexistent/node") == 0
+
+
 def test_config_schema_contract(plugin, tmp_path):
     p = plugin.NacreMemoryProvider()
     schema = p.get_config_schema()

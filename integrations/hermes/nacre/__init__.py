@@ -23,6 +23,7 @@ import logging
 import os
 import queue
 import shutil
+import subprocess
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,24 @@ logger = logging.getLogger(__name__)
 
 _BREAKER_STRIKES = 3
 _QUEUE_MAX = 256  # bounded: drop-oldest beats unbounded growth on outage
+_MIN_NODE_MAJOR = 20  # the sidecar's floor; a v16 nvm default is a real trap
+
+
+def _node_major(node_bin: str) -> int:
+    """Major version of `node_bin`, or 0 if it can't run. A subprocess, not
+    a network call — `hermes memory status` must tell the truth about a
+    too-old node instead of reporting available ✓ (observed: a stale nvm
+    default v16 shadowing v24)."""
+    path = shutil.which(node_bin)
+    if not path:
+        return 0
+    try:
+        out = subprocess.run(
+            [path, "--version"], capture_output=True, text=True, timeout=10
+        ).stdout.strip()
+        return int(out.lstrip("v").split(".")[0])
+    except Exception:
+        return 0
 
 
 def _default_nacre_node_dir() -> Path:
@@ -93,7 +112,7 @@ class NacreMemoryProvider(MemoryProvider):
         sidecar_ok = (node_dir / "sidecar" / "sidecar.mjs").exists() and (
             node_dir / "index.js"
         ).exists()
-        node_ok = shutil.which(cfg.get("node_bin", "node")) is not None
+        node_ok = _node_major(cfg.get("node_bin", "node")) >= _MIN_NODE_MAJOR
         return ((has_llm_key and has_emb_key) or replay) and sidecar_ok and node_ok
 
     # -- setup contract ------------------------------------------------------
