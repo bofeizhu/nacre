@@ -621,7 +621,7 @@ override in nacre (`cargo update -p grit-core`), publish is BLOCKED(user).
       episode) so the artifact exercises Han indexing forever. Index
       cost measured, not estimated: ~1.7x unicode61 on mixed EN/CJK
       (noted in schema.sql). Full grit gate green (48 tests).
-- [ ] grit: search fuses the trigram leg — Query::text feeds BOTH
+- [x] grit: search fuses the trigram leg — Query::text feeds BOTH
       tokenizers; the trigram MATCH (only when the query has a ≥3-char
       token; skipped otherwise) contributes an additional ranked list
       into the existing RRF fusion alongside unicode61 FTS, vector, and
@@ -631,6 +631,16 @@ override in nacre (`cargo update -p grit-core`), publish is BLOCKED(user).
       silent expectation edits), short-query skip (2-char CJK documented
       as remaining gap), budget/targets interaction (SearchKind filter
       still applied before budget). Full grit gate, commit as 0.2.3.
+      → done 2026-07-11 (grit 1658473, local): three trigram legs join
+      the RRF; double-FTS-match rows deliberately outrank vector-only
+      candidates (documented in module docs). ZERO English re-pins
+      needed — every existing search expectation held. Test-discovered
+      refinement of the gap statement: a 2-char query equal to a WHOLE
+      indexed token (e.g. node name 李雷) still hits via unicode61
+      exact-token equality; only 2-char substrings buried inside longer
+      runs (跳动 in 字节跳动) remain unmatchable. The v4 fixture's CJK
+      content is asserted reachable through the public search API
+      post-freeze. Gate green, 49 tests.
 - [ ] nacre: conformance green against the patched grit (recorded
       requests must not move — retrieval is grit-internal; the replay
       asserts are hits-non-empty, which fusion preserves). Add a CJK
