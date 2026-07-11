@@ -606,13 +606,21 @@ CJK substring recall. Cross-repo flow as always: work in ../grit under
 its AGENTS.md, gate there, commit there (0.2.3), UNCOMMITTED patch
 override in nacre (`cargo update -p grit-core`), publish is BLOCKED(user).
 
-- [ ] grit: trigram shadow FTS tables + schema v4 — `nodes_fts_tri`,
+- [x] grit: trigram shadow FTS tables + schema v4 — `nodes_fts_tri`,
       `edges_fts_tri`, `episodes_fts_tri` (tokenize='trigram', external
       content on the base tables, insert/update/delete triggers
       mirroring the existing FTS triggers), v3→v4 migration that creates
       the tables and rebuilds them from existing rows (frozen v4
       fixture + migration test per the fixture convention). Document
       index-size cost (quickbench note).
+      → done 2026-07-11 (grit b1e72f7, local): migration rebuild proven
+      against the frozen v3 fixture — pre-v4 rows are trigram-matchable
+      after open (raw-SQL assertion, deliberately the one sub-API peek
+      in the test suite; rusqlite added as a same-pinned dev-dep). v4
+      fixture frozen WITH CJK content (李雷/字节跳动 node, edge fact,
+      episode) so the artifact exercises Han indexing forever. Index
+      cost measured, not estimated: ~1.7x unicode61 on mixed EN/CJK
+      (noted in schema.sql). Full grit gate green (48 tests).
 - [ ] grit: search fuses the trigram leg — Query::text feeds BOTH
       tokenizers; the trigram MATCH (only when the query has a ≥3-char
       token; skipped otherwise) contributes an additional ranked list
