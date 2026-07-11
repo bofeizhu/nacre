@@ -466,6 +466,23 @@ Electron app demonstrates the need, or on user say-so):
 - [ ] Golden traces #3+: bulk-ish episode volume (candidate-pool
       saturation), group_id isolation, purge/right-to-forget.
       (Trace #2 — text/json sources — was promoted into Milestone 5.)
+- [ ] Port upstream's pure-function edge-case tests (helpers_test.py,
+      test_text_utils.py, datetime/`ensure_utc` handling) as additional
+      unit tests over the already-ported functions — cheap hardening
+      beyond what the two golden traces happen to exercise. Upstream's
+      integration/driver/client tests stay out of scope (they test layers
+      grit and nacre's model design replace).
+- [x] Replay-mode perf comparison (measured 2026-07-11, same machine,
+      recorded LLM/embedder responses — orchestration + storage overhead
+      only, LLM latency excluded): full-trace replay incl. state dump and
+      retrieval queries runs **~0.05–0.10s in nacre+grit (release)** vs
+      **~5.4s pipeline-time in Python Graphiti + FalkorDB** (~6.3s process
+      incl. ~0.9s interpreter/import startup) — roughly **75×** per trace,
+      ~14ms vs ~1.1s per episode. Caveats: the Python side runs the oracle
+      harness config (SEMAPHORE_LIMIT=1, serialized; container round-trips
+      to FalkorDB) — it measures the architecture difference
+      (in-process SQLite vs out-of-process graph DB), not tuned Python;
+      real ingestion is LLM-dominated either way.
 - Search cross-encoder reranking evaluation.
 - Communities-equivalent topic rollups, designed natively (not a port).
 - [x] crates.io publish of nacre-core — done 2026-07-11 (user-approved):
