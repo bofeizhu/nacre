@@ -639,6 +639,18 @@ Electron app demonstrates the need, or on user say-so):
       policy at the harness boundary. If a future pin wires it into
       add_episode, follow with a golden trace. (Hermes Stage 1 needs at
       most a sync_turn length cap for pasted-file turns.)
+- [ ] Host-fulfilled model I/O + Swift bindings (iOS, noted 2026-07-11):
+      on iOS nacre cannot own LLM/embedding endpoint calls (no shipped
+      keys, no subprocess → no sidecar) — the app must fulfill model
+      requests through its own protocol. The core already supports this
+      by construction (LanguageModel/Embedder are injected traits; HTTP
+      clients are optional features; the recording contract's canonical
+      request JSON is the hand-off payload). Work when the milestone
+      lands: `HostModel`/`HostEmbedder` (channel-bridged trait impls,
+      structurally ReplayModel with live answers) + UniFFI Swift
+      bindings over nacre-core, in-process. Bonus shapes: embeddings
+      on-device (CoreML; grit registers any model-id/dim), offline
+      queueing with late fulfillment (Clock keeps event time honest).
 - Search cross-encoder reranking evaluation.
 - Communities-equivalent topic rollups, designed natively (not a port).
 - [x] crates.io publish of nacre-core — done 2026-07-11 (user-approved):
