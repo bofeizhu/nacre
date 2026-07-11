@@ -560,6 +560,21 @@ coded against in the provider README.
       Dogfood observations for the Stage-2 review: a duplicate
       adoption-fact edge (possible draft-edge dedup miss) and "user" as
       an entity name (set user_label/assistant_label at activation).
+- [x] Real-Hermes integration test (user-requested 2026-07-11):
+      `hermes_real_check.py`, run under HERMES'S OWN venv python by
+      `tests/test_hermes_real.py` (skipped where no Hermes install
+      exists). Exercises the seams the ABC-stub pytest cannot: Hermes's
+      plugin discovery + loader (instantiates the provider as
+      `_hermes_user_memory.nacre`, a subclass of the REAL ABC), and
+      MemoryManager orchestration — `initialize_all` with the cli extras
+      agent_init threads through (warning/status callbacks,
+      session_title), `sync_all`'s background worker + sync_turn
+      signature inspection, `on_session_end` + `shutdown_all` teardown.
+      Replay mode, offline, ep-0 deltas exact. Read agent_init.py's
+      activation block line-by-line: config `memory.provider` → loader →
+      is_available → the exact call sequence the test replicates. The
+      only seam not exercised is the literal chat loop above
+      MemoryManager — that is what activation itself proves.
 - [ ] BLOCKED(user: activate + dogfood) — run `hermes memory setup`,
       select nacre, chat normally for 2+ weeks, then offline review
       (viz + manual searchEdges) decides Stage 2 (prefetch/recall tools).
