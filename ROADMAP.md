@@ -654,11 +654,19 @@ override in nacre (`cargo update -p grit-core`), publish is BLOCKED(user).
       统计学 each return exactly their fact through search_edges with
       the stub embedder — keyword path alone, no vector signal. Full
       gate + addon rebuild + Node tests + pytest all green.
-- [ ] Verify on the real dogfood graph: one Chinese keyword probe
+- [x] Verify on the real dogfood graph: one Chinese keyword probe
       (e.g. 随机过程) against ~/.hermes/nacre/memory.db through the
       patched stack — the leg must surface the OCR-project facts that
       vector-only search ranks by similarity alone. Read-only; one
       query-embedding call at most.
+      → done 2026-07-11: probed a scratch COPY (patched grit migrates on
+      open — the original stayed at schema v3, verified via
+      user_version). searchEdges("随机过程", limit 5, one live Zhipu
+      embed) returned 5/5 exact-substring facts from the real captured
+      graph — the OCR corpus structure (教材/答案 CONSISTS_OF, 目录
+      locations, PDF page counts) leading the ranking via the
+      double-FTS-match boost. The trigram leg works on real dogfood
+      data, not just fixtures.
 - [ ] BLOCKED(user: cargo publish approval) Release grit 0.2.3, drop
       nacre's patch override, relock, full gates both repos, push both.
 
