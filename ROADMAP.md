@@ -481,7 +481,7 @@ Live-API smoke under the same preapproved terms and keys as Milestones
 is a moving target (v0.18, git install) — pin the upstream commit hash we
 coded against in the provider README.
 
-- [ ] Sidecar: `crates/nacre-node/sidecar/sidecar.mjs` — ndjson-over-stdio
+- [x] Sidecar: `crates/nacre-node/sidecar/sidecar.mjs` — ndjson-over-stdio
       server over the built addon: `init` (dbPath, deviceId, groupId,
       provider configs from env), `addEpisode`, `searchEdges`, `status`,
       `shutdown`. One request → one response line, fail-loud errors as
@@ -489,6 +489,13 @@ coded against in the provider README.
       loudly when the addon isn't built), exercising init → addEpisode →
       searchEdges → an error surface. Documented request/response shapes
       in a README.
+      → done 2026-07-11: strictly-sequential request chain (episode order
+      is meaningful); credentials env-only, validated at init; closing
+      stdin exits cleanly (parent-death safety). Test spawns the real
+      child and replays trace1 through it — deltas, provenance, replay
+      miss and unknown-method both come back as {id, error}, clean exit
+      verified. Green first run. Note: a stale nvm default (v16) shadowed
+      Node 24 in fresh shells — tests need the v24 bin on PATH.
 - [ ] Hermes provider shim: `integrations/hermes/nacre/` — a
       MemoryProvider implementation (capture-only): `initialize` spawns +
       supervises the sidecar (env-passed keys, hermes_home-scoped db
