@@ -523,13 +523,20 @@ coded against in the provider README.
       env-only, never written back). on_session_switch stays the ABC
       no-op — Stage 1 keeps no per-session state (one group, episodes
       stamped by wall clock).
-- [ ] Provider README + install: integrations/hermes/README.md — what
+- [x] Provider README + install: integrations/hermes/README.md — what
       Stage 1 does and deliberately does not do, key setup, the staged
       rollout plan, kill switches (`hermes memory off`, delete the db
       file), the pinned Hermes commit. An `install.sh` that symlinks the
       plugin into $HERMES_HOME/plugins/nacre and verifies discovery
       (`hermes memory status` should list it INACTIVE) — installing is
       allowed, activating is not.
+      → done 2026-07-11: pinned Hermes v0.18.2 / upstream 8e734810.
+      install.sh is idempotent, refuses to clobber anything it didn't
+      create, and verifies discovery READ-ONLY through Hermes's own
+      loader (its venv python + discover_memory_providers) rather than
+      grepping — ran it: symlink created, 'nacre' discovered,
+      `hermes memory status` still shows "(none — built-in only)".
+      Installed on this machine, awaiting user activation.
 - [ ] Live smoke (preapproved terms): drive the provider code path
       outside Hermes — spawn the real sidecar with oracle/.env keys,
       sync_turn 3 synthetic conversation turns, assert episodes/nodes/
