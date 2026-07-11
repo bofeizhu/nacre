@@ -667,8 +667,12 @@ override in nacre (`cargo update -p grit-core`), publish is BLOCKED(user).
       locations, PDF page counts) leading the ranking via the
       double-FTS-match boost. The trigram leg works on real dogfood
       data, not just fixtures.
-- [ ] BLOCKED(user: cargo publish approval) Release grit 0.2.3, drop
-      nacre's patch override, relock, full gates both repos, push both.
+- [x] Release grit 0.2.3, drop nacre's patch override, relock, full
+      gates both repos, push both.
+      → done 2026-07-11 (user-approved): grit-core + grit-compat 0.2.3
+      on crates.io, grit tagged v0.2.3 and pushed (1658473); nacre
+      locked to the registry checksum, full gate + Node + pytest green.
+      Milestone 7 complete — CJK keyword retrieval ships.
 
 ## Later (do not start without a user decision)
 
