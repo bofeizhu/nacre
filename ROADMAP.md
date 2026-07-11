@@ -454,6 +454,70 @@ motivates; core changes must not alter recorded requests.
       `nacre-node` (name, platforms, prebuilds). Everything before this
       works from a local build.
 
+## Milestone 6 — Hermes dogfood, Stage 1: capture-only memory provider
+
+Rationale (decided 2026-07-11): dogfood nacre on real conversational
+workload WITHOUT touching Claude — Hermes Agent (installed on this
+machine, v0.18.x) has a pluggable MemoryProvider ABC
+(`agent/memory_provider.py` in $HERMES_HOME/hermes-agent; user plugins in
+`$HERMES_HOME/plugins/<name>/`) built exactly for memory-framework
+swap-and-test. The protocol is raw-text-in / formatted-text-out: the
+provider owns ALL its LLM/embedder calls (nacre's pipeline already does),
+on its own keys, separate from Hermes's chat model (their DeepSeek keys
+are different accounts — confirmed). Stage 1 is CAPTURE-ONLY by design:
+`sync_turn` → addEpisode; no prefetch, no tools, empty
+system_prompt_block — zero influence on any Hermes session. Recall
+(Stage 2) only after offline review of weeks of real graph. Architecture:
+thin Python provider shim → Node sidecar (ndjson over stdio) → the
+existing nacre-node addon. No pyo3.
+
+Hard rules for this milestone: the plugin may be INSTALLED into
+$HERMES_HOME/plugins/ but never ACTIVATED (memory.provider config) by the
+agent — activation is the user's move via `hermes memory setup`. Keys
+never in code/logs/commits; provider collects its own keys (env_var
+names NACRE_LLM_API_KEY / NACRE_EMBEDDER_API_KEY, secrets → Hermes .env).
+Live-API smoke under the same preapproved terms and keys as Milestones
+4–5 (oracle/.env, DeepSeek+Zhipu, smoke scale, ~3 runs). The Hermes ABC
+is a moving target (v0.18, git install) — pin the upstream commit hash we
+coded against in the provider README.
+
+- [ ] Sidecar: `crates/nacre-node/sidecar/sidecar.mjs` — ndjson-over-stdio
+      server over the built addon: `init` (dbPath, deviceId, groupId,
+      provider configs from env), `addEpisode`, `searchEdges`, `status`,
+      `shutdown`. One request → one response line, fail-loud errors as
+      `{id, error}`. Offline `node --test` with replay recordings (skip
+      loudly when the addon isn't built), exercising init → addEpisode →
+      searchEdges → an error surface. Documented request/response shapes
+      in a README.
+- [ ] Hermes provider shim: `integrations/hermes/nacre/` — a
+      MemoryProvider implementation (capture-only): `initialize` spawns +
+      supervises the sidecar (env-passed keys, hermes_home-scoped db
+      path, group per agent_workspace); `sync_turn` formats
+      "user: …\nassistant: …" message episodes and enqueues to a worker
+      thread (never blocks the turn); agent_context guard (primary only);
+      circuit breaker copied from the bundled providers' pattern
+      (fail-open, N strikes → stop trying, log once); `on_session_switch`
+      flush; `get_tool_schemas` → []; `system_prompt_block` → "";
+      `get_config_schema`/`save_config` per the ABC's setup contract;
+      `backup_paths` for the db file. Offline pytest (uv project under
+      integrations/hermes/) against a replay-mode sidecar, with a stubbed
+      `agent.memory_provider` ABC so tests run outside Hermes.
+- [ ] Provider README + install: integrations/hermes/README.md — what
+      Stage 1 does and deliberately does not do, key setup, the staged
+      rollout plan, kill switches (`hermes memory off`, delete the db
+      file), the pinned Hermes commit. An `install.sh` that symlinks the
+      plugin into $HERMES_HOME/plugins/nacre and verifies discovery
+      (`hermes memory status` should list it INACTIVE) — installing is
+      allowed, activating is not.
+- [ ] Live smoke (preapproved terms): drive the provider code path
+      outside Hermes — spawn the real sidecar with oracle/.env keys,
+      sync_turn 3 synthetic conversation turns, assert episodes/nodes/
+      edges landed, dump with examples/viz and eyeball. Budget ~3 runs;
+      BLOCKED(findings) if it isn't working within that.
+- [ ] BLOCKED(user: activate + dogfood) — run `hermes memory setup`,
+      select nacre, chat normally for 2+ weeks, then offline review
+      (viz + manual searchEdges) decides Stage 2 (prefetch/recall tools).
+
 ## Later (do not start without a user decision)
 
 Coverage deepening, in the order agreed 2026-07-10 (activate when the
