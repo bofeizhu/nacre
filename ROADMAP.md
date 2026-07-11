@@ -590,6 +590,54 @@ coded against in the provider README.
       select nacre, chat normally for 2+ weeks, then offline review
       (viz + manual searchEdges) decides Stage 2 (prefetch/recall tools).
 
+## Milestone 7 — CJK keyword retrieval: trigram FTS leg in grit
+
+Rationale (user-decided 2026-07-11, promoted from "Later"): grit's FTS5
+tables use the default unicode61 tokenizer, which does not segment Han
+text — measured: a stored `李雷在字节跳动担任数据工程师` gets 0 FTS hits
+for `字节跳动`, so hybrid retrieval degrades to vector-only for CJK
+content. The Layer 3 app is Chinese-first; Hermes upstream independently
+solved the same problem with a trigram FTS5 table. Design: a trigram leg
+ALONGSIDE unicode61, not a replacement — FTS5's trigram tokenizer needs
+≥3-char queries (misses 2-char words like 北京) and changes English
+matching, so the safe shape is an additional ranked list fused by grit's
+existing RRF: unicode61 keeps word-language behavior, trigram carries
+CJK substring recall. Cross-repo flow as always: work in ../grit under
+its AGENTS.md, gate there, commit there (0.2.3), UNCOMMITTED patch
+override in nacre (`cargo update -p grit-core`), publish is BLOCKED(user).
+
+- [ ] grit: trigram shadow FTS tables + schema v4 — `nodes_fts_tri`,
+      `edges_fts_tri`, `episodes_fts_tri` (tokenize='trigram', external
+      content on the base tables, insert/update/delete triggers
+      mirroring the existing FTS triggers), v3→v4 migration that creates
+      the tables and rebuilds them from existing rows (frozen v4
+      fixture + migration test per the fixture convention). Document
+      index-size cost (quickbench note).
+- [ ] grit: search fuses the trigram leg — Query::text feeds BOTH
+      tokenizers; the trigram MATCH (only when the query has a ≥3-char
+      token; skipped otherwise) contributes an additional ranked list
+      into the existing RRF fusion alongside unicode61 FTS, vector, and
+      graph expansion. Unit tests: the measured CJK case (字节跳动 hits),
+      an English regression sweep over the existing search tests
+      (rankings may shift by fusion — re-pin deliberately if needed, no
+      silent expectation edits), short-query skip (2-char CJK documented
+      as remaining gap), budget/targets interaction (SearchKind filter
+      still applied before budget). Full grit gate, commit as 0.2.3.
+- [ ] nacre: conformance green against the patched grit (recorded
+      requests must not move — retrieval is grit-internal; the replay
+      asserts are hits-non-empty, which fusion preserves). Add a CJK
+      retrieval test in nacre's search module: Chinese fact ingested,
+      Chinese word query returns it through search_edges with the stub
+      embedder (proving the FTS leg alone carries CJK). Update the
+      "Later" CJK entry → resolved pointer to this milestone.
+- [ ] Verify on the real dogfood graph: one Chinese keyword probe
+      (e.g. 随机过程) against ~/.hermes/nacre/memory.db through the
+      patched stack — the leg must surface the OCR-project facts that
+      vector-only search ranks by similarity alone. Read-only; one
+      query-embedding call at most.
+- [ ] BLOCKED(user: cargo publish approval) Release grit 0.2.3, drop
+      nacre's patch override, relock, full gates both repos, push both.
+
 ## Later (do not start without a user decision)
 
 Coverage deepening, in the order agreed 2026-07-10 (activate when the
@@ -619,16 +667,8 @@ Electron app demonstrates the need, or on user say-so):
       to FalkorDB) — it measures the architecture difference
       (in-process SQLite vs out-of-process graph DB), not tuned Python;
       real ingestion is LLM-dominated either way.
-- [ ] CJK keyword retrieval (grit): FTS5's default unicode61 tokenizer
-      does not segment Han text — measured 2026-07-11: a stored
-      `李雷在字节跳动担任数据工程师` gets 0 FTS hits for `字节跳动` —
-      so hybrid search degrades to vector-only for Chinese/Japanese
-      content (Zhipu embedding-3 carries recall well, but exact-token
-      matching is lost). Fix is a deliberate grit design increment:
-      FTS5 `trigram` tokenizer (pinned SQLite 3.53.2 supports it) or a
-      dual-index scheme — trigram changes English matching behavior, so
-      it can't be a drop-in swap. Pipeline/storage/embedding are already
-      fully CJK-capable (trace1 ep-4's Japanese replays byte-exact).
+- [x] CJK keyword retrieval (grit) — PROMOTED to Milestone 7
+      (user-decided 2026-07-11); measurements and design live there.
 - [ ] Doc chunking (decided 2026-07-11): port upstream's
       `utils/content_chunking.py` as a pure `nacre::chunking` module +
       an `addDocument`/`chunkContent` surface in the bindings — when
