@@ -124,8 +124,8 @@ impl Memory {
                 .clone()
                 .or_else(|| Some(now.to_rfc3339_opts(chrono::SecondsFormat::Secs, false))),
         };
-        let model = build_model(&llm)?;
-        let embedder = build_embedder(&embedder)?;
+        let model = build_model(llm)?;
+        let embedder = build_embedder(embedder)?;
         let previous = retrieve_previous_episodes(
             &self.grit,
             &episode.group_id,
@@ -334,7 +334,7 @@ impl Memory {
         limit: u32,
         embedder: EmbedderConfig,
     ) -> Result<Vec<SearchHitJs>> {
-        let embedder = build_embedder(&embedder)?;
+        let embedder = build_embedder(embedder)?;
         let hits = search_edges(&self.grit, &embedder, &query, &group_id, limit as usize)
             .await
             .map_err(generic)?;

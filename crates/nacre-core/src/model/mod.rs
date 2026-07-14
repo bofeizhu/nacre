@@ -11,6 +11,7 @@
 pub mod claude;
 #[cfg(feature = "openai-embed")]
 pub mod openai_embed;
+pub mod prompted;
 mod recording;
 
 pub use recording::{
@@ -187,7 +188,6 @@ pub fn decode_response<T: serde::de::DeserializeOwned>(
     })
 }
 
-#[cfg(any(feature = "claude", feature = "openai-embed"))]
 /// Minimal async sleep without a tokio dependency in the library: reqwest
 /// already requires a tokio runtime, but the `time` feature may be absent —
 /// spawn the wait on a blocking thread.
@@ -206,7 +206,6 @@ async fn tokio_sleep(secs: u64) {
     }
 }
 
-#[cfg(any(feature = "claude", feature = "openai-embed"))]
 async fn yield_now() {
     struct YieldOnce(bool);
     impl std::future::Future for YieldOnce {

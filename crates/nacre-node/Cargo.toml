@@ -9,10 +9,17 @@ description = "Node.js bindings for nacre (napi-rs) — the Layer 3 gateway"
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+# The shipped addon has NO networked providers: hosts inject transport via
+# the "host" provider callbacks. `live-providers` re-enables the reqwest
+# based Claude/OpenAI clients for the opt-in live smoke scripts only.
+default = []
+live-providers = ["nacre-core/claude", "nacre-core/openai-embed"]
+
 [dependencies]
 napi = { version = "3", default-features = false, features = ["napi8", "async", "serde-json"] }
 napi-derive = "3"
-nacre-core = { path = "../nacre-core", features = ["claude", "openai-embed"] }
+nacre-core = { path = "../nacre-core" }
 grit-core = "0.2"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 serde_json = "1.0"

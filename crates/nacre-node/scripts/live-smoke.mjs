@@ -2,7 +2,9 @@
 // recordings. NOT part of `npm test` — run explicitly with keys in env:
 //
 //   set -a && . ../../oracle/.env && set +a
-//   npm run build && node scripts/live-smoke.mjs
+//   npm run build:live && node scripts/live-smoke.mjs
+//   (the default build ships without networked providers; deepseek/zhipu
+//   need the live-providers feature)
 //
 // Env (never printed): CAPTURE_LLM_API_KEY (DeepSeek, Anthropic-style
 // endpoint) and CAPTURE_EMBEDDER_API_KEY (Zhipu embedding-3); set
