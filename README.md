@@ -32,7 +32,7 @@ stacks blur them. This one cuts them apart:
 
 | Layer | What | Where |
 |:-----:|------|-------|
-| 3 | agent app (Electron + napi-rs) | *next* |
+| 3 | the agent app | *next* |
 | **2** | **LLM extraction pipeline — this repo** | `nacre-core` |
 | 1 | embedded bi-temporal graph on SQLite | [`grit-core`](https://crates.io/crates/grit-core) |
 
@@ -40,6 +40,17 @@ stacks blur them. This one cuts them apart:
 LLM call; grit stores, retrieves, and applies the decisions — offline,
 in-process, one SQLite file. Time is injected, every judgment is recorded
 and replayable, and `cargo test` never touches the network.
+
+**Why a graph, and not chunks in a vector store?** Because judgment needs
+structure to land on: dedup needs *entities* to merge, invalidation needs
+*facts* with time bounds to retire, and trustworthy recall needs
+*provenance* to cite — none of which k-NN over chunks can express. A
+vector database answers "what sounds similar?"; this stack answers "what
+do I know, since when, and who told me?" — and can still answer it as of
+last March. The storage half of the argument — exact, deterministic,
+zero-index-lifecycle retrieval versus ANN throughput, with measured
+numbers — is made in grit's README:
+[Not a vector database](https://github.com/bofeizhu/grit#not-a-vector-database).
 
 ## What works today
 
