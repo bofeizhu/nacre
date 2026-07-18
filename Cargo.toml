@@ -8,8 +8,8 @@ edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/bofeizhu/nacre"
 readme = "README.md"
-keywords = ["knowledge-graph", "agent", "memory", "llm", "extraction"]
-categories = ["science"]
+keywords = ["agent-memory", "knowledge-graph", "graphiti", "llm", "sqlite"]
+categories = ["artificial-intelligence", "database", "data-structures", "text-processing"]
 
 # Co-development against a local grit checkout (see ../CLAUDE.md): add an
 # UNCOMMITTED override here —
