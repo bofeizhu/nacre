@@ -1,5 +1,5 @@
 // Dumps a smoke memory graph as JSON for the viewer — the data-contract
-// proof for the Electron graph view. Replay-ingests the committed golden
+// proof for the Layer 3 graph view. Replay-ingests the committed golden
 // trace (oracle/fixtures/trace1) through the built addon (offline, no
 // network), then dumps every read-path row the visualization needs:
 // nodes (labels, bi-temporal fields), edges (validity, provenance

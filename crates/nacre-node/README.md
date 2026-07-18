@@ -84,6 +84,7 @@ Division of labor:
   previous-episode window and mutates the graph (upstream Graphiti's
   prescribed queueing model). Hosts should serialize ingestion.
 
-Reference host integration: a native desktop host —
-`<host transport module>` in the host app repo, with
-the full behavior contract in its `<host memory architecture doc>`.
+Reference host integration: a native desktop host wires these callbacks to
+its own model/embedding backend behind the `nacre-node` API and serializes
+ingestion per group; the full behavior contract is the callback + threading
+rules documented above.

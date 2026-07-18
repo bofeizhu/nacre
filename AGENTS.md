@@ -9,7 +9,7 @@ three-layer agent-memory stack:
   retrieval on SQLite. No LLM, no network.
 - **Layer 2 (this repo):** entity/edge extraction, dedup judgment, temporal
   invalidation, summarization — every step that needs an LLM or an embedding.
-- **Layer 3 (separate, future):** the agent harness (Rig / Claude API) in a Tauri app.
+- **Layer 3 (separate, future):** the app layer that consumes nacre as a versioned artifact through typed bindings.
 
 If you are an agent working in this repo: everything below is binding. When a
 request conflicts with a **Design Invariant**, stop and surface the conflict

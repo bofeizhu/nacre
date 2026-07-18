@@ -323,13 +323,13 @@ fine (replay only fails on unrecorded requests nacre makes).
 
 ## Milestone 5 — Layer 3 gateway: napi-rs bindings, visualization-first
 
-Rationale: the Electron app ("Electron + RTK + napi-rs") is the product,
+Rationale: the Layer 3 app (a host consuming the nacre-node bindings) is the product,
 and memory-graph visualization is a must-have feature. Visualization is a
 pure read-path concern and every primitive already exists (group scans,
 budgeted traversal, bi-temporal as_of/as_at, node_history, mentions,
 AddEpisodeOutcome deltas) — this milestone exposes them across the FFI
 with TypeScript types, plus the write path and search. NOT in scope: the
-Electron app itself (own repo later), npm publishing (user-gated, like
+Layer 3 app itself (own repo later), npm publishing (user-gated, like
 crates.io), and any new pipeline features — bindings wrap what exists.
 Conformance stays the regression net for any core change a binding
 motivates; core changes must not alter recorded requests.
@@ -406,7 +406,7 @@ motivates; core changes must not alter recorded requests.
       graph as JSON (nodes/edges with labels, validity, provenance) plus a
       minimal self-contained viewer.html (offline, no CDN) rendering it as
       a force-directed graph with an as-of time slider stub. Not a
-      product — a data-contract proof the Electron app can copy from.
+      product — a data-contract proof the Layer 3 app can copy from.
       → done 2026-07-11 (nacre-node/examples/viz/): dump-graph.mjs
       replay-ingests trace1 through the addon (offline) and writes
       graph.json + graph.data.js (script-src wrapper so file:// works —
@@ -677,7 +677,7 @@ override in nacre (`cargo update -p grit-core`), publish is BLOCKED(user).
 ## Later (do not start without a user decision)
 
 Coverage deepening, in the order agreed 2026-07-10 (activate when the
-Electron app demonstrates the need, or on user say-so):
+Layer 3 app demonstrates the need, or on user say-so):
 
 - [ ] Custom entity/edge ontologies: node + edge attribute extraction
       (`extract_attributes` + `apply_capped_attributes` paths) with a
@@ -715,18 +715,18 @@ Electron app demonstrates the need, or on user say-so):
       policy at the harness boundary. If a future pin wires it into
       add_episode, follow with a golden trace. (Hermes Stage 1 needs at
       most a sync_turn length cap for pasted-file turns.)
-- [ ] Host-fulfilled model I/O + Swift bindings (iOS, noted 2026-07-11):
-      on iOS nacre cannot own LLM/embedding endpoint calls (no shipped
-      keys, no subprocess → no sidecar) — the app must fulfill model
-      requests through its own protocol. The core already supports this
-      by construction (LanguageModel/Embedder are injected traits; HTTP
-      clients are optional features; the recording contract's canonical
-      request JSON is the hand-off payload). Work when the milestone
-      lands: `HostModel`/`HostEmbedder` (channel-bridged trait impls,
-      structurally ReplayModel with live answers) + UniFFI Swift
-      bindings over nacre-core, in-process. Bonus shapes: embeddings
-      on-device (CoreML; grit registers any model-id/dim), offline
-      queueing with late fulfillment (Clock keeps event time honest).
+- [ ] Host-fulfilled model I/O + in-process bindings for a native host
+      (noted 2026-07-11): a native client cannot own LLM/embedding
+      endpoint calls (no shipped keys, no subprocess → no sidecar) — the
+      app must fulfill model requests through its own protocol. The core
+      already supports this by construction (LanguageModel/Embedder are
+      injected traits; HTTP clients are optional features; the recording
+      contract's canonical request JSON is the hand-off payload). Work
+      when the milestone lands: `HostModel`/`HostEmbedder` (channel-
+      bridged trait impls, structurally ReplayModel with live answers) +
+      in-process bindings over nacre-core. Bonus shapes: on-device
+      embeddings (host registers any model-id/dim), offline queueing with
+      late fulfillment (Clock keeps event time honest).
 - Search cross-encoder reranking evaluation.
 - Communities-equivalent topic rollups, designed natively (not a port).
 - [x] crates.io publish of nacre-core — done 2026-07-11 (user-approved):

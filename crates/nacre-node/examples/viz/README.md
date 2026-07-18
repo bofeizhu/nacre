@@ -2,7 +2,7 @@
 
 A minimal, self-contained memory-graph visualization. **Not a product** — a
 proof that the read-path contract exposed by `nacre-node` is sufficient for
-the Layer 3 graph view, and a reference the Electron app can copy from.
+the Layer 3 graph view, and a reference the Layer 3 app can copy from.
 
 ## Files
 
