@@ -169,6 +169,13 @@ cargo test --workspace     # offline: replay + property + prompt-fidelity + conf
 | [PROMPTS.md](PROMPTS.md) | verbatim prompt-port ledger |
 | [oracle/](oracle/) | capture harness + golden-trace fixtures |
 
+## Contributing
+
+The README's "awaiting trace coverage" tier is the standing contribution
+menu — each item's acceptance test is mechanical (the conformance oracle
+goes green). [CONTRIBUTING.md](CONTRIBUTING.md) has the dev loop;
+[AGENTS.md](AGENTS.md) is the binding contract.
+
 ## License
 
 Apache-2.0. Contains material ported from
