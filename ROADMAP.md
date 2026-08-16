@@ -787,7 +787,18 @@ path-local until the app ships).
       nacre-xcframework-v0.1.2.zip (checksum in the release notes — the
       xcframework's Info.plist is not byte-deterministic across rebuilds,
       so the published zip is the canonical artifact and checksums are
-      computed from it, never from a rebuild). Push-guard note: the
+      computed from it, never from a rebuild). FOLLOW-UP same day (user
+      report: the tag was not actually SPM-consumable by URL — the dev
+      manifest's path binary target + gitignored bindings cannot resolve
+      remotely): v0.1.2 re-pointed (user-approved force) at a
+      release-manifest commit (d411f34, branch release/v0.1.2) carrying
+      the url:/checksum: binary target and the committed generated
+      bindings; verified by a bare scratch consumer resolving
+      `.package(url:, from: "0.1.2")`, downloading the asset, building
+      and running through the FFI. Every future release repeats this:
+      dev manifest stays path-based on main, the tag carries a release
+      manifest (flow documented in crates/nacre-swift/README.md).
+      Push-guard note: the
       pre-push term list predated this milestone and flagged the FFI
       library's name; user approved narrowing it — the codename guards
       stay active and re-checked this push.

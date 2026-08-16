@@ -173,3 +173,26 @@ shapes through the real bindings, which is what proves the *packaging*:
 The Swift tests resolve the fixtures from `#filePath`, so they work from
 any checkout, and they `XCTSkip` **loudly** when the build artifacts or
 the oracle fixtures are absent rather than failing.
+
+## Releasing (maintainers)
+
+`main`'s `Package.swift` is the DEV manifest: a `path:` binary target and
+gitignored generated bindings, rebuilt by `scripts/build-swift.sh`. That
+manifest cannot resolve for remote SwiftPM consumers, so every release tag
+must carry a RELEASE MANIFEST instead (first done for v0.1.2, commit
+d411f34):
+
+1. From the release commit on `main`: run `scripts/build-swift.sh`, then
+   zip the artifact and compute its checksum —
+   `ditto -c -k --sequesterRsrc --keepParent target/swift/nacre.xcframework nacre-xcframework-vX.Y.Z.zip`
+   and `swift package compute-checksum <zip>`.
+2. Create the GitHub release for the tag name and attach the zip. The zip
+   is the canonical artifact: the xcframework's `Info.plist` is not
+   byte-deterministic across rebuilds, so never recompute the checksum
+   from a rebuild.
+3. On a `release/vX.Y.Z` branch: swap the binary target to the asset's
+   `url:` + `checksum:`, commit the generated
+   `swift/Sources/NacreFFI/*.swift` (`git add -f`), commit.
+4. Point the version tag at that commit and push it. Verify from a bare
+   scratch package: `.package(url: "https://github.com/bofeizhu/nacre.git",
+   from: "X.Y.Z")` must fetch, download, build, and run.
