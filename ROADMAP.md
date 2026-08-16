@@ -777,6 +777,20 @@ path-local until the app ships).
       → done 2026-08-16: model-layer plumbing only (no recorded request can
       move), both conformance traces green; two regression tests assert the
       two halves — a pending poll does not re-wake, and the timer does.
+- [x] Release: push main, publish nacre-core, tag, attach the prebuilt
+      XCFramework to a GitHub release so SwiftPM consumers can use a
+      url + checksum binary target without a local Rust toolchain.
+      → done 2026-08-16 (user-approved): nacre-core 0.1.2 on crates.io
+      (0.1.1 had already shipped from the July batch; 0.1.2 carries the
+      backoff-timer fix), tag v0.1.2, release
+      https://github.com/bofeizhu/nacre/releases/tag/v0.1.2 with
+      nacre-xcframework-v0.1.2.zip (checksum in the release notes — the
+      xcframework's Info.plist is not byte-deterministic across rebuilds,
+      so the published zip is the canonical artifact and checksums are
+      computed from it, never from a rebuild). Push-guard note: the
+      pre-push term list predated this milestone and flagged the FFI
+      library's name; user approved narrowing it — the codename guards
+      stay active and re-checked this push.
 
 ## Later (do not start without a user decision)
 
