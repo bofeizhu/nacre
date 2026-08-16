@@ -269,7 +269,7 @@ impl LanguageModel for ClaudeModel {
             }
             if attempt < MAX_RETRIES {
                 // Exponential backoff: 1s, 2s.
-                super::tokio_sleep(1u64 << attempt).await;
+                super::sleep(1u64 << attempt).await;
             }
         }
         Err(ModelError::Provider(format!(

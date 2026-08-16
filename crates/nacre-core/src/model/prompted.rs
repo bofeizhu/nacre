@@ -101,7 +101,7 @@ impl<T: ChatTransport> LanguageModel for PromptedModel<T> {
             }
             if attempt < MAX_RETRIES {
                 // Exponential backoff: 1s, 2s.
-                super::tokio_sleep(1u64 << attempt).await;
+                super::sleep(1u64 << attempt).await;
             }
         }
         Err(ModelError::Provider(format!(
@@ -311,16 +311,30 @@ mod tests {
     }
 
     fn block_on<F: Future>(future: F) -> F::Output {
-        // The retry backoff polls a channel with yield_now, so a trivial
-        // busy-poll executor is enough here.
-        use std::task::{Context, Poll, Waker};
-        let waker = Waker::noop();
-        let mut cx = Context::from_waker(waker);
+        // Poll, park until woken, poll again — the retry backoff wakes its
+        // task from a timer thread instead of self-waking, so a noop waker
+        // would leave this spinning for the whole wait.
+        use std::sync::Arc;
+        use std::task::{Context, Poll, Wake, Waker};
+
+        struct Unpark(std::thread::Thread);
+        impl Wake for Unpark {
+            fn wake(self: Arc<Self>) {
+                self.wake_by_ref();
+            }
+            fn wake_by_ref(self: &Arc<Self>) {
+                self.0.unpark();
+            }
+        }
+
+        let waker = Waker::from(Arc::new(Unpark(std::thread::current())));
+        let mut cx = Context::from_waker(&waker);
         let mut future = Box::pin(future);
         loop {
             if let Poll::Ready(output) = future.as_mut().poll(&mut cx) {
                 return output;
             }
+            std::thread::park();
         }
     }
 

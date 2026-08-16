@@ -189,41 +189,58 @@ pub fn decode_response<T: serde::de::DeserializeOwned>(
 }
 
 /// Minimal async sleep without a tokio dependency in the library: reqwest
-/// already requires a tokio runtime, but the `time` feature may be absent —
-/// spawn the wait on a blocking thread.
-async fn tokio_sleep(secs: u64) {
-    let (tx, rx) = std::sync::mpsc::channel::<()>();
+/// already requires a tokio runtime, but the `time` feature may be absent,
+/// and these futures are also polled with no runtime at all (the Swift
+/// bindings hand them to uniffi's poll-driven FFI bridge). So the wait is a
+/// plain thread timer that wakes the task **exactly once** when it fires.
+///
+/// The waking is the whole point: an implementation that re-wakes itself on
+/// every poll — a yield loop around a channel — turns each backoff into a
+/// spin at whatever rate the executor can poll, which across the FFI is a
+/// pinned core for the full 1–2s wait.
+async fn sleep(secs: u64) {
+    #[derive(Default)]
+    struct Timer {
+        elapsed: bool,
+        waker: Option<std::task::Waker>,
+    }
+
+    let timer = std::sync::Arc::new(std::sync::Mutex::new(Timer::default()));
+    let fired = std::sync::Arc::clone(&timer);
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(secs));
-        let _ = tx.send(());
-    });
-    // Poll the channel without blocking the async executor.
-    loop {
-        match rx.try_recv() {
-            Ok(()) | Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
-            Err(std::sync::mpsc::TryRecvError::Empty) => yield_now().await,
+        let waker = {
+            let mut fired = fired.lock().expect("timer state is never poisoned");
+            fired.elapsed = true;
+            fired.waker.take()
+        };
+        // Wake outside the lock: an executor that polls inline would
+        // otherwise deadlock against the poll below.
+        if let Some(waker) = waker {
+            waker.wake();
         }
-    }
-}
+    });
 
-async fn yield_now() {
-    struct YieldOnce(bool);
-    impl std::future::Future for YieldOnce {
+    struct Elapsed(std::sync::Arc<std::sync::Mutex<Timer>>);
+    impl Future for Elapsed {
         type Output = ();
         fn poll(
-            mut self: std::pin::Pin<&mut Self>,
+            self: std::pin::Pin<&mut Self>,
             cx: &mut std::task::Context<'_>,
         ) -> std::task::Poll<()> {
-            if self.0 {
+            let mut timer = self.0.lock().expect("timer state is never poisoned");
+            if timer.elapsed {
                 std::task::Poll::Ready(())
             } else {
-                self.0 = true;
-                cx.waker().wake_by_ref();
+                // Refreshed, not just stored: a task may be moved between
+                // wakers between polls.
+                timer.waker = Some(cx.waker().clone());
                 std::task::Poll::Pending
             }
         }
     }
-    YieldOnce(false).await
+
+    Elapsed(timer).await
 }
 
 #[cfg(test)]
@@ -239,6 +256,64 @@ mod tests {
             ModelError::Decode { schema_name, .. } => assert_eq!(schema_name, "NameList"),
             other => panic!("expected Decode error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn sleep_leaves_the_task_parked_until_the_timer_fires() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::task::{Context, Wake, Waker};
+
+        // A poll before the timer fires must NOT schedule another one: the
+        // retry backoff used to re-wake itself every poll, which under a
+        // poll-driven executor (uniffi drives these futures from the host
+        // with no runtime underneath) spins for the entire wait.
+        #[derive(Default)]
+        struct CountingWaker(AtomicUsize);
+        impl Wake for CountingWaker {
+            fn wake(self: Arc<Self>) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+
+        let wakes = Arc::new(CountingWaker::default());
+        let waker = Waker::from(Arc::clone(&wakes));
+        let mut cx = Context::from_waker(&waker);
+        let mut sleeping = Box::pin(sleep(60));
+        assert!(sleeping.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(
+            wakes.0.load(Ordering::SeqCst),
+            0,
+            "a pending backoff must park the task, not re-wake it"
+        );
+    }
+
+    #[test]
+    fn sleep_wakes_the_task_once_when_the_timer_fires() {
+        use std::sync::Arc;
+        use std::sync::mpsc::{Sender, channel};
+        use std::task::{Context, Wake, Waker};
+
+        struct Notify(std::sync::Mutex<Sender<()>>);
+        impl Wake for Notify {
+            fn wake(self: Arc<Self>) {
+                self.wake_by_ref();
+            }
+            fn wake_by_ref(self: &Arc<Self>) {
+                let _ = self.0.lock().expect("sender is never poisoned").send(());
+            }
+        }
+
+        let (tx, rx) = channel();
+        let waker = Waker::from(Arc::new(Notify(std::sync::Mutex::new(tx))));
+        let mut cx = Context::from_waker(&waker);
+        let mut sleeping = Box::pin(sleep(0));
+        if sleeping.as_mut().poll(&mut cx).is_pending() {
+            rx.recv_timeout(std::time::Duration::from_secs(5))
+                .expect("the timer wakes the task instead of leaving it parked forever");
+            assert!(sleeping.as_mut().poll(&mut cx).is_ready());
+        }
+        assert!(rx.try_recv().is_err(), "one wake, not a stream of them");
     }
 
     #[test]

@@ -86,7 +86,7 @@ impl OpenAiEmbedder {
             if status.as_u16() == 429 || status.is_server_error() {
                 if attempt < MAX_RETRIES {
                     attempt += 1;
-                    super::tokio_sleep(1u64 << attempt).await;
+                    super::sleep(1u64 << attempt).await;
                     continue;
                 }
                 return Err(ModelError::Provider(format!(
