@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/nacre-core", "crates/nacre-node"]
+members = [
+    "crates/nacre-core",
+    "crates/nacre-node",
+    "crates/nacre-swift",
+    "crates/uniffi-bindgen",
+]
 
 [workspace.package]
 version = "0.1.1"

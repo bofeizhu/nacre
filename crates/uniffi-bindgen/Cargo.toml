@@ -1,0 +1,10 @@
+[package]
+name = "uniffi-bindgen"
+version = "0.0.1"
+edition.workspace = true
+license = "Apache-2.0"
+publish = false
+description = "Swift binding generator for nacre-swift (uniffi-bindgen-swift entry point)"
+
+[dependencies]
+uniffi = { version = "0.32", features = ["cli"] }
