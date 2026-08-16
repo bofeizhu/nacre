@@ -674,6 +674,110 @@ override in nacre (`cargo update -p grit-core`), publish is BLOCKED(user).
       locked to the registry checksum, full gate + Node + pytest green.
       Milestone 7 complete — CJK keyword retrieval ships.
 
+## Milestone 8 — Swift bindings for a native Apple host: SwiftPM + host-fulfilled model I/O
+
+Rationale (user-decided 2026-08-16, promoted from "Later"): the Layer 3
+app is a native Apple client (iOS/iPadOS/macOS), and a native client
+cannot own the LLM/embedding endpoint calls — it ships no keys and cannot
+fork a sidecar, so the *app* must fulfill model requests through its own
+transport. nacre-core already supports this by construction:
+`LanguageModel`/`Embedder` are injected traits, the HTTP clients are
+optional features, and `model::prompted::ChatTransport` is exactly the
+seam a host implements (one plain chat round in, response text out) while
+every piece of schema/retry judgment stays in Rust. The bindings are
+UniFFI 0.32 (proc-macro mode, no UDL) shipped as a SwiftPM package where
+the repo itself is the package; the adopting app implements two Swift
+protocols. Parity target is the nacre-node surface minus the sidecar, and
+the discipline is the same one nacre-node established: **the cargo gate
+must stay green on a machine with no Xcode or Swift toolchain** — Swift
+packaging is a separate, optional build step, and the Swift-side tests
+skip loudly when its artifacts are absent. NOT in scope: the Layer 3 app
+itself, any new pipeline features, and publishing (SwiftPM consumption is
+path-local until the app ships).
+
+- [x] Scaffolding: `crates/uniffi-bindgen` (the in-workspace
+      `uniffi-bindgen-swift` binary — codegen must run at the exact uniffi
+      version the bindings crate compiled against) and `crates/nacre-swift`
+      (`lib` + `staticlib` + `cdylib`, `publish = false`), both workspace
+      members. No networked providers, no tokio in `[dependencies]`
+      (nacre-core's futures are runtime-agnostic and the Swift side polls
+      them).
+      → done 2026-08-16: uniffi 0.32.0; `#![deny(unsafe_code)]`
+      deliberately omitted (the macros generate the `extern "C"`
+      scaffolding — the exemption is noted in the crate docs).
+- [x] The protocols + the `Memory` object: `LlmProvider` / `EmbeddingProvider`
+      as async foreign traits with `ChatRequest`/`ChatMessage`/`ChatRole`/
+      `ModelTier`/`EmbedderSpec` records, `NacreError` (uniffi::Error +
+      thiserror + the mandatory `From<UnexpectedUniFFICallbackError>`),
+      the `SwiftChatTransport`/`HostEmbedder` adapters over
+      `PromptedModel`/`Embedder`, `AnyModel`/`AnyEmbedder` dispatch
+      (RPITIT traits aren't dyn-compatible), and the full surface —
+      open / addEpisode / searchEdges / the replay twins / the seven sync
+      read calls / version — plus the rows port. Rust-side tests only
+      (offline: stub protocols + the committed trace1 recordings).
+      → done 2026-08-16: `#[uniffi::export(rust, foreign)]` over
+      `#[async_trait::async_trait]` compiles as-is (async fn in a
+      dyn-dispatched trait still needs the boxing crate; the export attr
+      stays OUTER). Empirical notes for the packaging increment: the
+      generated Swift renders the protocols as `async throws`, carries
+      every doc comment across, turns `#[uniffi(default = …)]` record
+      fields into Swift default arguments, and exposes the constructor as
+      the static factory `Memory.open(path:deviceId:)`. One deliberate
+      spec refinement: `ModelError::Provider` maps to
+      `NacreError.Provider` (not `.Model`) so a host can tell its own
+      transport failing apart from nacre's decode/recording failures;
+      everything else follows the spec's mapping.
+- [x] SwiftPM package: `Package.swift` at the repo root (tools 6.0,
+      iOS 17 / macOS 14), a binary target over the built XCFramework, the
+      generated `NacreFFI` target in Swift 5 language mode (uniffi 0.32's
+      async foreign-trait codegen does not compile under Swift 6 mode —
+      upstream #2929, fix unreleased), the hand-written `NacreKit`
+      wrapper, and `scripts/build-swift.sh` (staticlib slices → bindgen →
+      XCFramework → generated sources; arm64-only, idempotent).
+      Generated artifacts gitignored.
+      → done 2026-08-16: three arm64 slices (ios / ios-sim / macos) in
+      `target/swift/nacre.xcframework`, `swift build` clean. Two
+      mechanical findings: `--module-name` names the **C** module and the
+      generated Swift imports `nacre_swiftFFI` (crate namespace + `FFI`)
+      behind a `#if canImport`, so the spec's `NacreFFI` would have made
+      the import silently vanish — the modulemap uses `nacre_swiftFFI` and
+      `NacreFFI` is the Swift target name only; and the script exports
+      `IPHONEOS_/MACOSX_DEPLOYMENT_TARGET` to match the package's floor,
+      without which the bundled-SQLite objects are built against the host
+      SDK and the linker warns on every consumer build.
+- [x] Swift-side XCTest suite: a stub actor conforming to both protocols
+      driving addEpisode → reads → searchEdges on a temp file, a replay
+      test over the committed trace1 recordings, and the error surface
+      (a throwing Swift conformer comes back as `NacreError.Provider`).
+      Must `XCTSkip` loudly when the XCFramework / generated sources are
+      absent so a bare checkout's cargo-only workflow stays green.
+      → done 2026-08-16: 7 tests green (`swift test`), including trace 1's
+      ep-0 deltas asserted from Swift (4 nodes, 2 facts — the same numbers
+      the Rust and Node suites assert). The actor conformer and the whole
+      test target build in **Swift 6** mode: only the generated target
+      needs `.v5`, so a host app is unconstrained. Fixture and artifact
+      paths resolve from `#filePath`.
+- [x] Docs: the build + consumption story at repo level and a pointer
+      from the top-level README that the Swift package exists. (The host
+      contract itself is already documented in `crates/nacre-swift/README.md`,
+      which landed with the protocols.)
+      → done 2026-08-16: a "Swift package" section in the top-level README
+      (build invocation, what the package exports, arm64-only note, and
+      that none of it is on the cargo path) plus the crate README's build /
+      package-layout / test sections, including the module-name trap and
+      the path-local consumption story.
+- [x] nacre-core: make the retry backoff waker-aware (fallout of this
+      milestone, found in review). The sleep between provider retries
+      polled a channel behind a self-waking yield, which is harmless under
+      tokio but pathological here: uniffi exports async functions with no
+      runtime underneath, so the host polls the future as fast as it can
+      and the 1–2s backoff becomes a pinned core spinning across the FFI.
+      Replaced with a thread timer that stores the waker and fires it
+      exactly once — still zero tokio, still runtime-agnostic.
+      → done 2026-08-16: model-layer plumbing only (no recorded request can
+      move), both conformance traces green; two regression tests assert the
+      two halves — a pending poll does not re-wake, and the timer does.
+
 ## Later (do not start without a user decision)
 
 Coverage deepening, in the order agreed 2026-07-10 (activate when the
@@ -715,18 +819,12 @@ Layer 3 app demonstrates the need, or on user say-so):
       policy at the harness boundary. If a future pin wires it into
       add_episode, follow with a golden trace. (Hermes Stage 1 needs at
       most a sync_turn length cap for pasted-file turns.)
-- [ ] Host-fulfilled model I/O + in-process bindings for a native host
-      (noted 2026-07-11): a native client cannot own LLM/embedding
-      endpoint calls (no shipped keys, no subprocess → no sidecar) — the
-      app must fulfill model requests through its own protocol. The core
-      already supports this by construction (LanguageModel/Embedder are
-      injected traits; HTTP clients are optional features; the recording
-      contract's canonical request JSON is the hand-off payload). Work
-      when the milestone lands: `HostModel`/`HostEmbedder` (channel-
-      bridged trait impls, structurally ReplayModel with live answers) +
-      in-process bindings over nacre-core. Bonus shapes: on-device
-      embeddings (host registers any model-id/dim), offline queueing with
-      late fulfillment (Clock keeps event time honest).
+- [x] Host-fulfilled model I/O + in-process bindings for a native host
+      (noted 2026-07-11) — PROMOTED to Milestone 8 (user-decided
+      2026-08-16); the design and the remaining work live there. Bonus
+      shapes still unclaimed: on-device embeddings (the host registers any
+      model-id/dim through `EmbedderSpec`), offline queueing with late
+      fulfillment (the injected clock keeps event time honest).
 - Search cross-encoder reranking evaluation.
 - Communities-equivalent topic rollups, designed natively (not a port).
 - [x] crates.io publish of nacre-core — done 2026-07-11 (user-approved):

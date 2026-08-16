@@ -66,8 +66,10 @@ let grit = Grit::open("memory.db", Options::new("my-device"))?;
 let llm = ClaudeModel::new(ClaudeConfig::new(api_key));            // or ::deepseek(key)
 let embedder = OpenAiEmbedder::new(OpenAiEmbedConfig::zhipu(key)); // or any /embeddings API
 
-// Ingest: context windows come from the graph itself.
-let previous = retrieve_previous_episodes(&grit, "chat", now, PREVIOUS_EPISODE_WINDOW)?;
+// Ingest: context windows come from the graph itself (scoped to the
+// incoming episode's source, exactly like upstream Graphiti).
+let previous = retrieve_previous_episodes(&grit, "chat", episode.source, now,
+                                          PREVIOUS_EPISODE_WINDOW)?;
 let outcome = add_episode(&grit, &llm, &embedder, &episode, &previous,
                           &AddEpisodeOptions::default(), now).await?;
 // outcome: node_ids, new_edge_ids, merges, invalidated_edge_ids — animate your UI with it.
@@ -83,6 +85,36 @@ let hits = search_edges(&grit, &embedder, "Where does Priya work?", "chat", 10).
 | `claude` | Anthropic Messages API | native structured outputs (`output_config` json_schema); **also drives Anthropic-compatible endpoints** — a `ClaudeConfig::deepseek()` preset uses DeepSeek's `/anthropic` endpoint with schema-in-prompt fallback |
 | `openai-embed` | OpenAI-compatible `/embeddings` | Zhipu `embedding-3` preset; configurable base URL, model, dimension (MRL truncation), batch chunking |
 | *(default)* | replay only | recordings in, decisions out — no network, ever |
+
+## Swift package
+
+The repo is also a SwiftPM package (`NacreKit`): the same pipeline
+in-process on iOS / iPadOS / macOS through
+[UniFFI](https://mozilla.github.io/uniffi-rs/) bindings
+([`crates/nacre-swift`](crates/nacre-swift/README.md)), with
+**host-fulfilled model I/O** — the app implements two Swift protocols
+(`LlmProvider`, `EmbeddingProvider`) and owns keys plus network, while
+every judgment call stays in Rust.
+
+```sh
+bash scripts/build-swift.sh   # static-library slices → XCFramework → generated Swift
+swift build && swift test     # from the repo root
+```
+
+The package exports `Memory`: open a memory file, `addEpisode`, hybrid
+`searchEdges`, the full synchronous read path (`nodesInGroup`,
+`edgesInGroup`, `episodesInGroup`, `traverse`, `nodeHistory`,
+`mentionsOf`, `previousEpisodes`), and the replay twins that drive those
+same paths from recorded responses — offline, with no protocols to
+implement.
+
+The build script is a prerequisite, not a convenience: it writes
+`target/swift/nacre.xcframework` and `swift/Sources/NacreFFI/`, both
+gitignored, and `Package.swift` points straight at them. Slices are
+**arm64 only** (device, simulator, Apple Silicon Mac) — Intel slices are
+a two-line change in the script if they are ever needed. None of it is on
+the cargo path: `cargo test --workspace` stays green on a machine with no
+Xcode installed.
 
 ## Correctness: the golden-trace oracle
 
@@ -168,6 +200,7 @@ cargo test --workspace     # offline: replay + property + prompt-fidelity + conf
 | [DEVIATIONS.md](DEVIATIONS.md) | accepted divergences from the golden traces |
 | [PROMPTS.md](PROMPTS.md) | verbatim prompt-port ledger |
 | [oracle/](oracle/) | capture harness + golden-trace fixtures |
+| [Package.swift](Package.swift) · [scripts/build-swift.sh](scripts/build-swift.sh) | the Swift package and the script that builds its artifacts |
 
 ## Contributing
 
