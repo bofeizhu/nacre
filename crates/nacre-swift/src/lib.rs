@@ -93,6 +93,16 @@ pub enum NacreError {
         /// The underlying model error, rendered.
         message: String,
     },
+    /// The episode id the caller supplied is already stored: that ingest
+    /// already landed, in full (one episode, one transaction). Reported
+    /// instead of silently doing nothing — only the caller knows whether
+    /// this is a retry arriving after the attempt it retries succeeded, or
+    /// a bug in its own bookkeeping.
+    #[error("episode {id} already exists")]
+    EpisodeExists {
+        /// The id that is already stored — the one that was passed in.
+        id: String,
+    },
     /// A grit storage failure.
     #[error("storage: {message}")]
     Storage {
@@ -139,6 +149,7 @@ impl From<PipelineError> for NacreError {
             PipelineError::Storage(e) => NacreError::Storage {
                 message: e.to_string(),
             },
+            PipelineError::EpisodeExists(id) => NacreError::EpisodeExists { id: id.to_string() },
         }
     }
 }
@@ -154,6 +165,16 @@ impl From<grit_core::Error> for NacreError {
 /// One episode to ingest.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct Episode {
+    /// Optional caller-supplied episode id (a UUID string) — the ingest
+    /// idempotency key. `nil` (the default) mints one.
+    ///
+    /// A host that retries failed ingests passes the SAME id on every
+    /// attempt for the same episode: the whole ingest commits in one
+    /// transaction, so a stored id means it already landed and the retry
+    /// comes back as [`NacreError::EpisodeExists`] instead of writing the
+    /// episode twice.
+    #[uniffi(default = None)]
+    pub id: Option<String>,
     /// Short episode name (metadata only; not stored in the graph).
     pub name: String,
     /// Raw text of the episode.
@@ -485,7 +506,16 @@ impl Memory {
     ) -> Result<AddEpisodeResult, NacreError> {
         let source = episode_source(episode.source.as_deref())?;
         let now = parse_time(episode.valid_at.as_deref(), "validAt")?;
+        // Validated with the other arguments, before the first model call:
+        // a malformed idempotency key is a host bug, and finding it out
+        // one provider round later would cost the host a request.
+        let id = episode
+            .id
+            .as_deref()
+            .map(|id| parse_id(id, "id"))
+            .transpose()?;
         let input = EpisodeInput {
+            id,
             name: episode.name,
             content: episode.content,
             source,
@@ -683,6 +713,27 @@ mod tests {
         match NacreError::from(decode) {
             NacreError::Model { message } => assert!(message.contains("recordings.json")),
             other => panic!("expected Model, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_idempotency_rejection_is_its_own_case() {
+        // A host branches on this one: "already ingested" is the expected
+        // outcome of a retry that arrives after its first attempt landed,
+        // not a storage failure. Collapsing it into a rendered message
+        // would make the host parse prose to tell them apart.
+        let id = uuid::Uuid::parse_str("3f2504e0-4f89-11d3-9a0c-0305e82c3301").unwrap();
+        match NacreError::from(PipelineError::EpisodeExists(id)) {
+            NacreError::EpisodeExists { id: reported } => assert_eq!(reported, id.to_string()),
+            other => panic!("expected EpisodeExists, got {other:?}"),
+        }
+        // A key that is not a UUID is bad input, named by field — the
+        // episode record carries two strings a host can get wrong.
+        match parse_id("not-a-uuid", "id").expect_err("garbage ids are rejected") {
+            NacreError::InvalidInput { message } => {
+                assert!(message.starts_with("id \"not-a-uuid\""), "{message}")
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
         }
     }
 

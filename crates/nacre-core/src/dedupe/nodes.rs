@@ -299,6 +299,7 @@ mod tests {
 
     fn previous() -> Vec<EpisodeInput> {
         vec![EpisodeInput {
+            id: None,
             name: "prev".into(),
             content: "Mina: earlier".into(),
             source: EpisodeSource::Message,

@@ -127,13 +127,23 @@ for Swift:
   Task abandons the await only: the pipeline runs to completion, keeps
   invoking the host protocols, and commits its writes. Gate UI departure
   on the returned outcome, not on `Task.cancel()`.
+- **Retry with the same `Episode.id`.** The optional id is the ingest
+  idempotency key: pass one (and persist it next to whatever the host is
+  ingesting) and every attempt at that episode carries it. The whole
+  ingest commits in one transaction, so a failure leaves the graph exactly
+  as it was — retry freely — and an id that is already stored comes back
+  as `NacreError.EpisodeExists(id:)`, meaning the earlier attempt landed
+  in full: mark it done rather than ingesting it again. Omit the id and
+  the pipeline mints one, as before, and a retry duplicates the episode.
+  An id that is not a UUID is `NacreError.InvalidInput`, raised with the
+  other argument checks before any protocol call.
 
 ## Surface
 
 | Swift | what |
 |---|---|
 | `Memory.open(path:deviceId:)` | open/create a memory file (a real path — in-memory databases are rejected) |
-| `addEpisode(episode:llm:embedder:embedderSpec:)` | full ingest; returns the change set (new / merged / invalidated ids) |
+| `addEpisode(episode:llm:embedder:embedderSpec:)` | full ingest, one transaction; returns the change set (new / merged / invalidated ids). `Episode.id` is the optional idempotency key |
 | `searchEdges(query:groupId:limit:embedder:embedderSpec:)` | hybrid recall with provenance |
 | `addEpisodeReplay(…)` / `searchEdgesReplay(…)` | the same paths against recorded responses — offline tests, no protocols needed |
 | `nodesInGroup` / `edgesInGroup` / `episodesInGroup` / `traverse` / `nodeHistory` / `mentionsOf` / `previousEpisodes` | the read path — the entire data contract a memory-graph view needs |
@@ -168,7 +178,9 @@ shapes through the real bindings, which is what proves the *packaging*:
   as `NacreError.Provider`, and the whole test target builds in Swift 6
   mode.
 - `swift/Tests/NacreKitTests/ReplayTests.swift` — trace 1 replayed from
-  Swift, asserting the same ep-0 deltas the Rust and Node suites assert.
+  Swift, asserting the same ep-0 deltas the Rust and Node suites assert,
+  plus the idempotency key: a second ingest under a stored id is refused
+  as `NacreError.EpisodeExists` and writes nothing.
 
 The Swift tests resolve the fixtures from `#filePath`, so they work from
 any checkout, and they `XCTSkip` **loudly** when the build artifacts or

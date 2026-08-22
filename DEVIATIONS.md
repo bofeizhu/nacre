@@ -165,3 +165,51 @@ rank/set comparison as an advisory signal.
 
 **Asserted by:** the sanity block in
 `tests/conformance.rs::golden_trace1_conformance`.
+
+## Atomic episode commit
+
+**What diverges:** Upstream finishes every model step first — the
+resolution phase issues no writes at all — and then persists the episode in
+a single call to `add_nodes_and_edges_bulk`, reached once from
+`add_episode` after extraction, resolution and attribute hydration. That
+call is not a transaction on the FalkorDB driver:
+`FalkorDriverSession.execute_write` simply awaits the function it is handed
+with the session itself standing in for the transaction (no BEGIN, no
+commit), so `add_nodes_and_edges_bulk_tx` generates whatever name/fact
+embeddings are still missing and then issues four independent queries —
+episode nodes, entity nodes, episodic edges, entity edges. The embedder
+calls all precede the first write, so an embedding failure writes nothing;
+the exposure is the gaps between the four queries. A failure or crash
+between them leaves the earlier writes standing — an episode plus its
+entities and mention edges, without the entity edges that carry the facts,
+which are saved last. That seam carries no idempotency key either, so a
+retry is a fresh episode over a graph already holding half of the first
+attempt. nacre commits an episode's entire write set (nodes, merges, label
+promotions, edges, invalidations, summaries, embeddings and the episode
+row) in ONE grit transaction, at the end of a planning phase that touches
+no storage. Nothing is written until everything is decided; an error writes
+nothing at all. `EpisodeInput.id` makes the retry expressible: a caller
+that re-submits a failed ingest under the same id either completes it
+exactly once or gets `PipelineError::EpisodeExists`.
+
+Consequence for the pipeline's internals: reads that used to see
+already-applied ops now consult a pending-write overlay
+(`pipeline.rs::Pending`) that answers with what the batch will store. Op
+kinds and their order are unchanged — the overlay exists to keep them
+unchanged.
+
+**Why acceptable:** Strictly stronger than upstream, and invisible in
+end-state. Both traces produce the same graph, op-for-op, and any run that
+fails is a run upstream would have left half-written — a state the fixtures
+never describe. The one behavior a caller can observe is the new error on a
+duplicate id, which is nacre-only API surface (upstream has no idempotency
+key at this seam).
+
+**Asserted by:** `tests/op_sequence.rs` (the ops and their order are
+byte-identical to the pre-batch pipeline, both traces),
+`tests/conformance.rs` (end state unchanged), `tests/atomicity.rs` (a
+truncated recording set fails an ingest mid-flight; the graph, its
+provenance links, its vectors and the oplog come out identical, and the
+retry ingests exactly once), and
+`pipeline.rs::tests::overlay_serves_pending_writes_within_one_episode`
+(the label-promotion path, which neither trace exercises).

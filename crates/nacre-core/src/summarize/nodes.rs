@@ -314,6 +314,7 @@ mod tests {
 
     fn episode(content: &str) -> EpisodeInput {
         EpisodeInput {
+            id: None,
             name: "ep".into(),
             content: content.into(),
             source: EpisodeSource::Message,

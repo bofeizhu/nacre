@@ -381,6 +381,7 @@ fn diff_value(
 
 fn trace_episode(spec: &Value) -> EpisodeInput {
     EpisodeInput {
+        id: None,
         name: spec["name"].as_str().unwrap().into(),
         content: spec["content"].as_str().unwrap().into(),
         source: match spec["source"].as_str().unwrap_or("message") {

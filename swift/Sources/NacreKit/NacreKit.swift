@@ -47,7 +47,7 @@
 /// )
 /// ```
 ///
-/// Four rules the compiler cannot enforce:
+/// Five rules the compiler cannot enforce:
 ///
 /// - **Ingest sequentially per group.** ``Memory`` is safe to share across
 ///   threads and grit serializes storage writes, but `addEpisode` reads the
@@ -68,6 +68,14 @@
 ///   `modelId` or `modelVersion` swap at the same dim is accepted silently
 ///   and quietly mixes two vector spaces in one index, which shows up as
 ///   bad recall, not as an error. Pin the spec per memory file.
+/// - **Retry with the same ``Episode/id``.** It is the ingest idempotency
+///   key: mint one per episode, persist it beside whatever is being
+///   ingested, and send it on every attempt. One ingest is one
+///   transaction, so a failure leaves the graph untouched and a retry is
+///   safe; an id the graph already holds comes back as
+///   ``NacreError/EpisodeExists(id:)``, which means the earlier attempt
+///   landed in full — mark it done instead of ingesting it again. Omit the
+///   id and a retry writes the episode twice.
 /// - **Call the read path off the main thread.** `nodesInGroup`,
 ///   `edgesInGroup`, `episodesInGroup`, `traverse`, `nodeHistory`,
 ///   `mentionsOf` and `previousEpisodes` are synchronous — they are

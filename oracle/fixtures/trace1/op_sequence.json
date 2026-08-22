@@ -1,0 +1,1104 @@
+{
+  "trace": "trace1",
+  "group_id": "trace1",
+  "placeholders": "UUIDs replaced by $nK, K = order of first appearance across the trace",
+  "episodes": [
+    {
+      "episode": "ep-0",
+      "op_count": 10,
+      "ops": [
+        {
+          "op": "add_node",
+          "id": "$n0",
+          "kind": "Entity",
+          "name": "Marco",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n1",
+          "kind": "Entity",
+          "name": "Priya",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n2",
+          "kind": "Entity",
+          "name": "Northwind Labs",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n3",
+          "kind": "Entity",
+          "name": "Queens",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_edge",
+          "id": "$n4",
+          "src": "$n1",
+          "dst": "$n2",
+          "rel": "WORKS_AT",
+          "fact": "Priya joined Northwind Labs as a data engineer in January",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1767225600000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n5",
+          "src": "$n1",
+          "dst": "$n3",
+          "rel": "LIVES_IN",
+          "fact": "Priya commutes from Queens",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1772476200000,
+          "invalid_at": null
+        },
+        {
+          "op": "update_node",
+          "id": "$n1",
+          "summary": "Priya joined Northwind Labs as a data engineer in January\nPriya commutes from Queens"
+        },
+        {
+          "op": "update_node",
+          "id": "$n2",
+          "summary": "Priya joined Northwind Labs as a data engineer in January"
+        },
+        {
+          "op": "update_node",
+          "id": "$n3",
+          "summary": "Priya commutes from Queens"
+        },
+        {
+          "op": "add_episode",
+          "id": "$n6",
+          "source": "chat between friends",
+          "kind": "message",
+          "content": "Marco: How's the new gig treating you?\nPriya: I love it — I joined Northwind Labs in January as a data engineer. The commute from Queens is rough though.",
+          "occurred_at": 1772476200000,
+          "group_id": "trace1",
+          "mentions": [
+            "$n0",
+            "$n1",
+            "$n2",
+            "$n3",
+            "$n4",
+            "$n5"
+          ]
+        }
+      ],
+      "embedded_nodes": [
+        "$n0",
+        "$n1",
+        "$n2",
+        "$n3"
+      ],
+      "embedded_edges": [
+        "$n4",
+        "$n5"
+      ]
+    },
+    {
+      "episode": "ep-1",
+      "op_count": 16,
+      "ops": [
+        {
+          "op": "add_node",
+          "id": "$n7",
+          "kind": "Entity",
+          "name": "Priya",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n8",
+          "kind": "Entity",
+          "name": "Biscuit",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n9",
+          "kind": "Entity",
+          "name": "Prospect Park",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n10",
+          "kind": "Entity",
+          "name": "Marco",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n11",
+          "kind": "Entity",
+          "name": "Knicks game",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n7",
+          "into": "$n1"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n10",
+          "into": "$n0"
+        },
+        {
+          "op": "add_edge",
+          "id": "$n12",
+          "src": "$n1",
+          "dst": "$n8",
+          "rel": "OWNS",
+          "fact": "Priya owns a dog named Biscuit",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1773065100000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n13",
+          "src": "$n1",
+          "dst": "$n9",
+          "rel": "WALKED_IN",
+          "fact": "Priya walked her dog Biscuit around Prospect Park",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1773065100000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n14",
+          "src": "$n0",
+          "dst": "$n11",
+          "rel": "ATTENDED",
+          "fact": "Marco caught a Knicks game with his brother",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1773065100000,
+          "invalid_at": null
+        },
+        {
+          "op": "update_node",
+          "id": "$n1",
+          "summary": "Priya joined Northwind Labs as a data engineer in January\nPriya commutes from Queens\nPriya owns a dog named Biscuit\nPriya walked her dog Biscuit around Prospect Park"
+        },
+        {
+          "op": "update_node",
+          "id": "$n8",
+          "summary": "Priya owns a dog named Biscuit"
+        },
+        {
+          "op": "update_node",
+          "id": "$n9",
+          "summary": "Priya walked her dog Biscuit around Prospect Park"
+        },
+        {
+          "op": "update_node",
+          "id": "$n0",
+          "summary": "Marco caught a Knicks game with his brother"
+        },
+        {
+          "op": "update_node",
+          "id": "$n11",
+          "summary": "Marco caught a Knicks game with his brother"
+        },
+        {
+          "op": "add_episode",
+          "id": "$n15",
+          "source": "chat between friends",
+          "kind": "message",
+          "content": "Priya: Spent the weekend walking Biscuit around Prospect Park. My dog is obsessed with the long meadow.\nMarco: Ha! I was in NYC too, caught a Knicks game with my brother.",
+          "occurred_at": 1773065100000,
+          "group_id": "trace1",
+          "mentions": [
+            "$n1",
+            "$n8",
+            "$n9",
+            "$n0",
+            "$n11",
+            "$n12",
+            "$n13",
+            "$n14"
+          ]
+        }
+      ],
+      "embedded_nodes": [
+        "$n0",
+        "$n1",
+        "$n2",
+        "$n3",
+        "$n8",
+        "$n9",
+        "$n11"
+      ],
+      "embedded_edges": [
+        "$n4",
+        "$n5",
+        "$n12",
+        "$n13",
+        "$n14"
+      ]
+    },
+    {
+      "episode": "ep-2",
+      "op_count": 27,
+      "ops": [
+        {
+          "op": "add_node",
+          "id": "$n16",
+          "kind": "Entity",
+          "name": "Marco",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n17",
+          "kind": "Entity",
+          "name": "Priya",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n18",
+          "kind": "Entity",
+          "name": "data engineering meetup",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n19",
+          "kind": "Entity",
+          "name": "New York City",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n20",
+          "kind": "Entity",
+          "name": "Flatiron Building",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n21",
+          "kind": "Entity",
+          "name": "Sam Okafor",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n22",
+          "kind": "Entity",
+          "name": "Northwind Labs",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n23",
+          "kind": "Entity",
+          "name": "stream processing",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n16",
+          "into": "$n0"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n17",
+          "into": "$n1"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n22",
+          "into": "$n2"
+        },
+        {
+          "op": "add_edge",
+          "id": "$n24",
+          "src": "$n1",
+          "dst": "$n18",
+          "rel": "WILL_ATTEND",
+          "fact": "Priya will attend the data engineering meetup in New York City at the Flatiron Building on Thursday.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1776330720000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n25",
+          "src": "$n0",
+          "dst": "$n18",
+          "rel": "IS_INVITING",
+          "fact": "Marco invited Priya to the data engineering meetup in New York City at the Flatiron Building on Thursday.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1776330720000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n26",
+          "src": "$n21",
+          "dst": "$n18",
+          "rel": "SPEAKING_AT",
+          "fact": "Sam Okafor is speaking at the data engineering meetup in New York City at the Flatiron Building.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1776330720000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n27",
+          "src": "$n21",
+          "dst": "$n2",
+          "rel": "WORKS_AT",
+          "fact": "Sam Okafor is a teammate of Priya at Northwind Labs.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1776330720000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n28",
+          "src": "$n21",
+          "dst": "$n23",
+          "rel": "TOPIC_OF_SPEECH",
+          "fact": "Sam Okafor is speaking about stream processing at the data engineering meetup.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1776330720000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n29",
+          "src": "$n18",
+          "dst": "$n19",
+          "rel": "LOCATED_IN",
+          "fact": "The data engineering meetup takes place in New York City.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1776330720000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n30",
+          "src": "$n18",
+          "dst": "$n20",
+          "rel": "LOCATED_AT",
+          "fact": "The data engineering meetup takes place at the Flatiron Building.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1776330720000,
+          "invalid_at": null
+        },
+        {
+          "op": "update_node",
+          "id": "$n0",
+          "summary": "Marco caught a Knicks game with his brother\nMarco invited Priya to the data engineering meetup in New York City at the Flatiron Building on Thursday."
+        },
+        {
+          "op": "update_node",
+          "id": "$n1",
+          "summary": "Priya joined Northwind Labs as a data engineer in January\nPriya commutes from Queens\nPriya owns a dog named Biscuit\nPriya walked her dog Biscuit around Prospect Park\nPriya will attend the data engineering meetup in New York City at the Flatiron Building on Thursday."
+        },
+        {
+          "op": "update_node",
+          "id": "$n18",
+          "summary": "Priya will attend the data engineering meetup in New York City at the Flatiron Building on Thursday.\nMarco invited Priya to the data engineering meetup in New York City at the Flatiron Building on Thursday.\nSam Okafor is speaking at the data engineering meetup in New York City at the Flatiron Building.\nThe data engineering meetup takes place in New York City.\nThe data engineering meetup takes place at the Flatiron Building."
+        },
+        {
+          "op": "update_node",
+          "id": "$n19",
+          "summary": "The data engineering meetup takes place in New York City."
+        },
+        {
+          "op": "update_node",
+          "id": "$n20",
+          "summary": "The data engineering meetup takes place at the Flatiron Building."
+        },
+        {
+          "op": "update_node",
+          "id": "$n21",
+          "summary": "Sam Okafor is speaking at the data engineering meetup in New York City at the Flatiron Building.\nSam Okafor is a teammate of Priya at Northwind Labs.\nSam Okafor is speaking about stream processing at the data engineering meetup."
+        },
+        {
+          "op": "update_node",
+          "id": "$n2",
+          "summary": "Priya joined Northwind Labs as a data engineer in January\nSam Okafor is a teammate of Priya at Northwind Labs."
+        },
+        {
+          "op": "update_node",
+          "id": "$n23",
+          "summary": "Sam Okafor is speaking about stream processing at the data engineering meetup."
+        },
+        {
+          "op": "add_episode",
+          "id": "$n31",
+          "source": "chat between friends",
+          "kind": "message",
+          "content": "Marco: Any chance you're free Thursday? There's a data engineering meetup in New York City, at the Flatiron Building.\nPriya: Count me in. My teammate Sam Okafor from Northwind Labs is speaking there about stream processing.",
+          "occurred_at": 1776330720000,
+          "group_id": "trace1",
+          "mentions": [
+            "$n0",
+            "$n1",
+            "$n18",
+            "$n19",
+            "$n20",
+            "$n21",
+            "$n2",
+            "$n23",
+            "$n24",
+            "$n25",
+            "$n26",
+            "$n27",
+            "$n28",
+            "$n29",
+            "$n30"
+          ]
+        }
+      ],
+      "embedded_nodes": [
+        "$n0",
+        "$n1",
+        "$n2",
+        "$n3",
+        "$n8",
+        "$n9",
+        "$n11",
+        "$n18",
+        "$n19",
+        "$n20",
+        "$n21",
+        "$n23"
+      ],
+      "embedded_edges": [
+        "$n4",
+        "$n5",
+        "$n12",
+        "$n13",
+        "$n14",
+        "$n24",
+        "$n25",
+        "$n26",
+        "$n27",
+        "$n28",
+        "$n29",
+        "$n30"
+      ]
+    },
+    {
+      "episode": "ep-3",
+      "op_count": 23,
+      "ops": [
+        {
+          "op": "add_node",
+          "id": "$n32",
+          "kind": "Entity",
+          "name": "Priya",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n33",
+          "kind": "Entity",
+          "name": "Northwind Labs",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n34",
+          "kind": "Entity",
+          "name": "Meridian Health",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n35",
+          "kind": "Entity",
+          "name": "Marco",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n36",
+          "kind": "Entity",
+          "name": "Priya Raman",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n37",
+          "kind": "Entity",
+          "name": "Sam",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n32",
+          "into": "$n1"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n33",
+          "into": "$n2"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n35",
+          "into": "$n0"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n36",
+          "into": "$n1"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n37",
+          "into": "$n21"
+        },
+        {
+          "op": "add_edge",
+          "id": "$n38",
+          "src": "$n1",
+          "dst": "$n2",
+          "rel": "LEFT",
+          "fact": "Priya left Northwind Labs last Friday.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": null,
+          "invalid_at": 1780617600000
+        },
+        {
+          "op": "add_edge",
+          "id": "$n39",
+          "src": "$n1",
+          "dst": "$n34",
+          "rel": "WILL_WORK_AT",
+          "fact": "Priya will start at Meridian Health next month as a senior data engineer.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1782864000000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n40",
+          "src": "$n0",
+          "dst": "$n1",
+          "rel": "CONGRATULATED",
+          "fact": "Marco congratulated Priya Raman on her new job.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1780951500000,
+          "invalid_at": null
+        },
+        {
+          "op": "invalidate_edge",
+          "edge_id": "$n4",
+          "invalid_at": 1782864000000
+        },
+        {
+          "op": "invalidate_edge",
+          "edge_id": "$n27",
+          "invalid_at": 1782864000000
+        },
+        {
+          "op": "invalidate_edge",
+          "edge_id": "$n28",
+          "invalid_at": 1780951500000
+        },
+        {
+          "op": "invalidate_edge",
+          "edge_id": "$n26",
+          "invalid_at": 1780951500000
+        },
+        {
+          "op": "update_node",
+          "id": "$n1",
+          "summary": "Priya joined Northwind Labs as a data engineer in January\nPriya commutes from Queens\nPriya owns a dog named Biscuit\nPriya walked her dog Biscuit around Prospect Park\nPriya will attend the data engineering meetup in New York City at the Flatiron Building on Thursday.\nPriya left Northwind Labs last Friday.\nPriya will start at Meridian Health next month as a senior data engineer.\nMarco congratulated Priya Raman on her new job.\nPriya left Northwind Labs last Friday.\nPriya will start at Meridian Health next month as a senior data engineer.\nMarco congratulated Priya Raman on her new job."
+        },
+        {
+          "op": "update_node",
+          "id": "$n2",
+          "summary": "Priya joined Northwind Labs as a data engineer in January\nSam Okafor is a teammate of Priya at Northwind Labs.\nPriya left Northwind Labs last Friday."
+        },
+        {
+          "op": "update_node",
+          "id": "$n34",
+          "summary": "Priya will start at Meridian Health next month as a senior data engineer."
+        },
+        {
+          "op": "update_node",
+          "id": "$n0",
+          "summary": "Marco caught a Knicks game with his brother\nMarco invited Priya to the data engineering meetup in New York City at the Flatiron Building on Thursday.\nMarco congratulated Priya Raman on her new job."
+        },
+        {
+          "op": "add_episode",
+          "id": "$n41",
+          "source": "chat between friends",
+          "kind": "message",
+          "content": "Priya: Big news — I left Northwind Labs last Friday. I'm starting at Meridian Health next month as a senior data engineer.\nMarco: Congrats, Priya Raman, moving up in the world! Does Sam know?",
+          "occurred_at": 1780951500000,
+          "group_id": "trace1",
+          "mentions": [
+            "$n1",
+            "$n2",
+            "$n34",
+            "$n0",
+            "$n1",
+            "$n21",
+            "$n38",
+            "$n39",
+            "$n40"
+          ]
+        }
+      ],
+      "embedded_nodes": [
+        "$n0",
+        "$n1",
+        "$n2",
+        "$n3",
+        "$n8",
+        "$n9",
+        "$n11",
+        "$n18",
+        "$n19",
+        "$n20",
+        "$n21",
+        "$n23",
+        "$n34"
+      ],
+      "embedded_edges": [
+        "$n4",
+        "$n5",
+        "$n12",
+        "$n13",
+        "$n14",
+        "$n24",
+        "$n25",
+        "$n26",
+        "$n27",
+        "$n28",
+        "$n29",
+        "$n30",
+        "$n38",
+        "$n39",
+        "$n40"
+      ]
+    },
+    {
+      "episode": "ep-4",
+      "op_count": 22,
+      "ops": [
+        {
+          "op": "add_node",
+          "id": "$n42",
+          "kind": "Entity",
+          "name": "Priya Raman",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n43",
+          "kind": "Entity",
+          "name": "Marco",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n44",
+          "kind": "Entity",
+          "name": "Japanese classes",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n45",
+          "kind": "Entity",
+          "name": "Meridian Health",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n46",
+          "kind": "Entity",
+          "name": "Tokyo",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n47",
+          "kind": "Entity",
+          "name": "佐藤さん",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "add_node",
+          "id": "$n48",
+          "kind": "Entity",
+          "name": "Biscuit",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace1"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n42",
+          "into": "$n1"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n43",
+          "into": "$n0"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n45",
+          "into": "$n34"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n48",
+          "into": "$n8"
+        },
+        {
+          "op": "add_edge",
+          "id": "$n49",
+          "src": "$n1",
+          "dst": "$n44",
+          "rel": "ATTENDS",
+          "fact": "Priya Raman started taking Japanese classes to prepare for the Meridian Health office opening in Tokyo.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1782925200000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n50",
+          "src": "$n1",
+          "dst": "$n47",
+          "rel": "TAUGHT_BY",
+          "fact": "Priya Raman's Japanese teacher (佐藤さん) says her pronunciation is decent.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1782925200000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n51",
+          "src": "$n34",
+          "dst": "$n46",
+          "rel": "HAS_OFFICE_IN",
+          "fact": "Meridian Health is opening an office in Tokyo.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1782925200000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n52",
+          "src": "$n8",
+          "dst": "$n1",
+          "rel": "BELONGS_TO",
+          "fact": "Biscuit is Priya Raman's dog.",
+          "attrs": {},
+          "group_id": "trace1",
+          "valid_at": 1782925200000,
+          "invalid_at": null
+        },
+        {
+          "op": "update_node",
+          "id": "$n1",
+          "summary": "Priya joined Northwind Labs as a data engineer in January\nPriya commutes from Queens\nPriya owns a dog named Biscuit\nPriya walked her dog Biscuit around Prospect Park\nPriya will attend the data engineering meetup in New York City at the Flatiron Building on Thursday.\nPriya left Northwind Labs last Friday.\nPriya will start at Meridian Health next month as a senior data engineer.\nMarco congratulated Priya Raman on her new job.\nPriya left Northwind Labs last Friday.\nPriya will start at Meridian Health next month as a senior data engineer.\nMarco congratulated Priya Raman on her new job.\nPriya Raman started taking Japanese classes to prepare for the Meridian Health office opening in Tokyo.\nPriya Raman's Japanese teacher (佐藤さん) says her pronunciation is decent.\nBiscuit is Priya Raman's dog."
+        },
+        {
+          "op": "update_node",
+          "id": "$n44",
+          "summary": "Priya Raman started taking Japanese classes to prepare for the Meridian Health office opening in Tokyo."
+        },
+        {
+          "op": "update_node",
+          "id": "$n34",
+          "summary": "Priya will start at Meridian Health next month as a senior data engineer.\nMeridian Health is opening an office in Tokyo."
+        },
+        {
+          "op": "update_node",
+          "id": "$n46",
+          "summary": "Meridian Health is opening an office in Tokyo."
+        },
+        {
+          "op": "update_node",
+          "id": "$n47",
+          "summary": "Priya Raman's Japanese teacher (佐藤さん) says her pronunciation is decent."
+        },
+        {
+          "op": "update_node",
+          "id": "$n8",
+          "summary": "Priya owns a dog named Biscuit\nBiscuit is Priya Raman's dog."
+        },
+        {
+          "op": "add_episode",
+          "id": "$n53",
+          "source": "chat between friends",
+          "kind": "message",
+          "content": "Priya: Started Japanese classes to prep for the Meridian Health office opening in Tokyo — my teacher 佐藤さん says my pronunciation is decent.\nMarco: 頑張って! Biscuit can be your study buddy.",
+          "occurred_at": 1782925200000,
+          "group_id": "trace1",
+          "mentions": [
+            "$n1",
+            "$n0",
+            "$n44",
+            "$n34",
+            "$n46",
+            "$n47",
+            "$n8",
+            "$n49",
+            "$n50",
+            "$n51",
+            "$n52"
+          ]
+        }
+      ],
+      "embedded_nodes": [
+        "$n0",
+        "$n1",
+        "$n2",
+        "$n3",
+        "$n8",
+        "$n9",
+        "$n11",
+        "$n18",
+        "$n19",
+        "$n20",
+        "$n21",
+        "$n23",
+        "$n34",
+        "$n44",
+        "$n46",
+        "$n47"
+      ],
+      "embedded_edges": [
+        "$n4",
+        "$n5",
+        "$n12",
+        "$n13",
+        "$n14",
+        "$n24",
+        "$n25",
+        "$n26",
+        "$n27",
+        "$n28",
+        "$n29",
+        "$n30",
+        "$n38",
+        "$n39",
+        "$n40",
+        "$n49",
+        "$n50",
+        "$n51",
+        "$n52"
+      ]
+    }
+  ]
+}

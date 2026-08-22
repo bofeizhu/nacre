@@ -145,6 +145,7 @@ impl LlmProvider for BrokenLlm {
 
 fn episode(name: &str, content: &str, valid_at: &str) -> Episode {
     Episode {
+        id: None,
         name: name.into(),
         content: content.into(),
         source: None,

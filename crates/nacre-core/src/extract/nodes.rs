@@ -262,6 +262,7 @@ mod tests {
 
     fn episode(name: &str, content: &str, source: EpisodeSource, valid_at: &str) -> EpisodeInput {
         EpisodeInput {
+            id: None,
             name: name.into(),
             content: content.into(),
             source,
@@ -393,6 +394,7 @@ mod tests {
     #[tokio::test]
     async fn json_episodes_route_to_the_json_prompt() {
         let episodes = vec![EpisodeInput {
+            id: None,
             name: "ep-0".into(),
             content: r#"{"user": "Jordan Lee"}"#.into(),
             source: EpisodeSource::Json,

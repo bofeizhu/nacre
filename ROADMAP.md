@@ -803,6 +803,94 @@ path-local until the app ships).
       library's name; user approved narrowing it — the codename guards
       stay active and re-checked this push.
 
+## Milestone 9 — atomic ingest: one episode, one transaction
+
+Rationale (defect found 2026-08-22): `add_episode` applied its ops one at a
+time, each in its own transaction, with model calls in between, and wrote
+the episode row LAST. Any failure after the first op left committed graph
+mutations that no episode evidenced — and `EpisodeInput` had no id, so a
+retry could not be recognized as a retry and duplicated the lot. That is
+not containable by a caller: any host with a "retry failed rows" rule
+accumulates half-written memories. Fix: grit gains an atomic multi-op
+write, and nacre's pipeline splits into plan (all model I/O, zero writes)
+→ commit (one batch), with a caller-supplied episode id as the idempotency
+key. Non-goals: re-embedding, cross-episode transactions, any change to
+what the traces expect.
+
+- [x] grit-core `apply_batch(Vec<WriteItem>)`: one writer message, one
+      IMMEDIATE transaction, N oplog entries plus their interleaved
+      embedding writes, all-or-nothing. Sync semantics unchanged (ids and
+      HLCs minted exactly as `apply` does); the embedding base-row rule is
+      evaluated inside the transaction, so a vector may follow the
+      `AddNode` that creates its row. (grit repo, branch `batch-apply`.)
+- [x] Freeze the pre-refactor write sequence FIRST: `tests/op_sequence.rs`
+      + `oracle/fixtures/<trace>/op_sequence.json` capture every op of
+      every episode, in order, uuids replaced by first-appearance
+      placeholders (98 ops trace1, 65 trace2). Without this the claim
+      "only the commit boundary changed" is unfalsifiable — conformance
+      compares end state, and end state cannot see op order.
+- [x] `EpisodeInput.id: Option<Uuid>` (`#[serde(default)]`) +
+      `PipelineError::EpisodeExists`, checked before any I/O.
+- [x] Two-phase pipeline: `pipeline.rs::Pending` holds the batch plus a
+      node overlay, every former `grit.apply` becomes `pending.push`, and
+      the four mid-flight node reads (label promotion after MergeNodes,
+      summarize inputs, summary diff, name embeddings) go overlay-first.
+      Step 8 pushes `AddEpisode` and commits the whole batch.
+      Gates: op_sequence unchanged on both traces, conformance green on
+      both, plus `tests/atomicity.rs` and an overlay unit test.
+- [x] Bindings: `nacre-node` `addEpisode` gains an optional `id` and a
+      stable code for the exists case; `nacre-swift` gains `id: String?`
+      on the episode record and a `NacreError.EpisodeExists(id:)` case
+      (regenerate via `scripts/build-swift.sh`; the M8 traps still apply —
+      NacreFFI target at `.v5`, module name `nacre_swiftFFI`). Gates:
+      Node 5/5, XCTest 9/9, both against the local grit patch.
+- [ ] Release: grit-core 0.3.0 to crates.io first, then bump nacre's
+      requirement to `grit-core = "0.3"`, DELETE the `[patch.crates-io]`
+      override (and let `Cargo.lock` follow), full gates against the
+      registry, nacre-core 0.2.0 + tag + GitHub release with the
+      xcframework (release-manifest flow, see M8).
+
+Traps hit, worth remembering:
+
+- **The overlay's headline case is invisible to the oracle.** The
+  label-promotion `UpdateNode` fires in NEITHER trace, so conformance and
+  op_sequence would both stay green with the promotion read left on
+  committed state — and a second draft resolving onto the same node would
+  silently emit a duplicate op. Hence the mandatory unit test
+  (`overlay_serves_pending_writes_within_one_episode`), written and run
+  against the OLD sequential code first so it pins the old behavior, not
+  the new code's opinion of it. Verified to fail when the read is put back
+  on storage.
+- **Some reads must NOT see the overlay.** The group node snapshot, the
+  group edge snapshot and the stored-node vectors define the *pre-episode*
+  graph, which is exactly what upstream dedups against; routing them
+  through the overlay would change candidate pools and break both traces.
+  Each site now carries a comment stating the invariant.
+- **Embeddings ride behind their row.** A node/edge vector is pushed
+  immediately after the op that creates the row it describes; grit checks
+  the base row inside the transaction, so ordering within the batch is
+  load-bearing.
+- **`mentions.dedup()` is adjacent-only** and trace1's ep-3 has a
+  non-adjacent duplicate mention. The fixture pins it; it is upstream
+  behavior, not a bug to fix in this batch.
+- The synthetic `Node` a pending `AddNode` puts in the overlay must carry
+  what the later reads consume — kind, name, summary, `attrs.labels`,
+  group_id. Timestamps are never read mid-flight (grit stamps its own at
+  commit), so they are not part of the contract.
+- Integration tests that each open a database must not share a path: four
+  scenarios in one file collided as a SQLite "disk I/O error" until each
+  got its own file.
+- **A napi async rejection cannot carry a custom `error.code`.** napi
+  derives it from its own closed `Status` enum (`Error<S>` accepts any
+  string status, but the async path needs `Error<Status>`: the promise
+  rejects through `impl ToNapiValue for Result<T>`, which renders
+  `e.status` and nothing else). So `nacre-node`'s idempotency rejection
+  leads its *message* with the exported `EPISODE_EXISTS_CODE` instead.
+  The Swift side has no such limit — `NacreError` is a real enum there.
+- A `#[uniffi(default = None)]` record field becomes a Swift default
+  argument, so `Episode.id` could go FIRST (mirroring `EpisodeInput`)
+  without touching one existing `Episode(...)` call site.
+
 ## Later (do not start without a user decision)
 
 Coverage deepening, in the order agreed 2026-07-10 (activate when the

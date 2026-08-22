@@ -22,9 +22,17 @@
 //! node dedup candidates come from pinned-arithmetic cosine ranking of the
 //! group's pre-episode nodes; edge dedup/invalidation pools are the
 //! group's pre-episode edges, split same-pair vs rest and sorted by fact.
+//!
+//! **Ingestion is two-phase**: a planning phase does all model I/O and
+//! decides the whole write set without touching storage, then one
+//! `apply_batch` commits it. An episode's graph mutations and the episode
+//! row that evidences them therefore land together or not at all — a
+//! failed call leaves the graph exactly as it was, which is what makes a
+//! retry safe (see [`EpisodeInput::id`]). See DEVIATIONS.md "Atomic
+//! episode commit".
 
 use chrono::{DateTime, Utc};
-use grit_core::{GraphOp, Grit};
+use grit_core::{GraphOp, Grit, WriteItem};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -57,6 +65,12 @@ pub enum PipelineError {
     /// grit failure.
     #[error(transparent)]
     Storage(#[from] grit_core::Error),
+    /// The caller-supplied [`EpisodeInput::id`] is already stored: this
+    /// episode was ingested before. Reported instead of silently doing
+    /// nothing — only the caller knows whether a second success is
+    /// expected (a retry landing after all) or a bug in its own bookkeeping.
+    #[error("episode {0} already exists")]
+    EpisodeExists(Uuid),
 }
 
 /// Options for [`add_episode`].
@@ -81,6 +95,131 @@ pub struct AddEpisodeOutcome {
     pub merges: Vec<(Uuid, Uuid)>,
     /// Stored edges invalidated by this run.
     pub invalidated_edge_ids: Vec<Uuid>,
+}
+
+/// The episode's write set while it is being decided: the batch that will
+/// be committed, plus the node state it implies.
+///
+/// Planning reads back some of what it has just decided (a canonical node's
+/// promoted labels, a draft node's name and summary). Committed storage
+/// cannot answer those reads — nothing is written until the batch lands —
+/// and grit is deliberately not asked to model an open transaction (nacre
+/// decides, grit executes). So the overlay models it here: the node fields
+/// the pipeline reads mid-flight, folded forward as ops are pushed, giving
+/// exactly the answers the old op-at-a-time pipeline got from storage.
+///
+/// Only nodes are overlaid: edges, invalidations and the episode row are
+/// never read back within the episode that writes them.
+struct Pending {
+    /// The batch, in the order the pipeline decided it.
+    items: Vec<WriteItem>,
+    /// Node rows as they will read once the batch commits.
+    nodes: std::collections::HashMap<Uuid, grit_core::Node>,
+    /// Injected time for synthetic rows; grit stamps its own at commit and
+    /// no mid-flight read looks at timestamps.
+    now_ms: i64,
+}
+
+impl Pending {
+    fn new(now: DateTime<Utc>) -> Self {
+        Self {
+            items: Vec::new(),
+            nodes: std::collections::HashMap::new(),
+            now_ms: now.timestamp_millis(),
+        }
+    }
+
+    /// Queue an op and fold its effect into the node overlay.
+    fn push(&mut self, grit: &Grit, op: GraphOp) -> Result<(), PipelineError> {
+        match &op {
+            GraphOp::AddNode {
+                id,
+                kind,
+                name,
+                summary,
+                attrs,
+                group_id,
+            } => {
+                self.nodes.insert(
+                    *id,
+                    grit_core::Node {
+                        id: *id,
+                        kind: kind.clone(),
+                        name: name.clone(),
+                        summary: summary.clone(),
+                        attrs: attrs.clone(),
+                        group_id: group_id.clone(),
+                        created_at: self.now_ms,
+                        expired_at: None,
+                        merged_into: None,
+                    },
+                );
+            }
+            GraphOp::MergeNodes { from, .. } => {
+                // grit expires the absorbed row; `into` keeps whatever the
+                // overlay (or storage) already says about it.
+                self.nodes.remove(from);
+            }
+            GraphOp::UpdateNode {
+                id,
+                name,
+                summary,
+                kind,
+                attrs,
+            } => {
+                // Per-field LWW, as grit folds it. Seed from storage when
+                // the target is a committed node.
+                if !self.nodes.contains_key(id)
+                    && let Some(node) = grit.node(*id)?
+                {
+                    self.nodes.insert(*id, node);
+                }
+                if let Some(node) = self.nodes.get_mut(id) {
+                    if let Some(name) = name {
+                        node.name = name.clone();
+                    }
+                    if let Some(summary) = summary {
+                        node.summary = summary.clone();
+                    }
+                    if let Some(kind) = kind {
+                        node.kind = kind.clone();
+                    }
+                    if let Some(attrs) = attrs {
+                        node.attrs = attrs.clone();
+                    }
+                }
+            }
+            // Never read back within this episode.
+            GraphOp::AddEdge { .. }
+            | GraphOp::InvalidateEdge { .. }
+            | GraphOp::AddEpisode { .. }
+            | GraphOp::Purge { .. } => {}
+        }
+        self.items.push(WriteItem::Op(op));
+        Ok(())
+    }
+
+    /// Read a node as it will be once the batch commits: the overlay when
+    /// this episode has already decided something about it, storage
+    /// otherwise.
+    fn node(&self, grit: &Grit, id: Uuid) -> Result<Option<grit_core::Node>, PipelineError> {
+        match self.nodes.get(&id) {
+            Some(node) => Ok(Some(node.clone())),
+            None => Ok(grit.node(id)?),
+        }
+    }
+
+    /// Queue a node's name vector. Embeddings are recomputable local state,
+    /// not oplog content — they ride in the batch only so they commit with
+    /// the row they describe.
+    fn push_node_embedding(&mut self, id: Uuid, vector: Vec<f32>) {
+        self.items.push(WriteItem::NodeEmbedding { id, vector });
+    }
+
+    /// Queue an edge's fact vector (see [`Pending::push_node_embedding`]).
+    fn push_edge_embedding(&mut self, id: Uuid, vector: Vec<f32>) {
+        self.items.push(WriteItem::EdgeEmbedding { id, vector });
+    }
 }
 
 fn labels_of(node: &grit_core::Node) -> Vec<String> {
@@ -173,6 +312,10 @@ pub fn retrieve_previous_episodes(
     Ok(episodes[window_start..]
         .iter()
         .map(|e| EpisodeInput {
+            // These rows describe episodes already stored, so their
+            // identity is known (prompt context reads only content and
+            // timestamp).
+            id: Some(e.id),
             name: String::new(),
             content: e.content.clone(),
             source,
@@ -202,9 +345,19 @@ fn cosine_f64(a: &[f32], b: &[f32]) -> f64 {
 }
 
 /// Ingest one episode: extract nodes, dedup against the graph, extract and
-/// resolve edges, apply the resulting ops, and record the episode with its
-/// mentions. `now` is injected (grit's clock stays authoritative for
-/// system-time columns it stamps itself).
+/// resolve edges, and record the episode with its mentions. `now` is
+/// injected (grit's clock stays authoritative for system-time columns it
+/// stamps itself).
+///
+/// All model I/O happens first and decides the entire write set; a single
+/// `apply_batch` then commits it. Nothing is stored until that commit, so
+/// an `Err` — a model failure, a timeout, a host that hung up — leaves the
+/// graph byte-identical to what it was before the call.
+///
+/// A caller that retries a failed ingest should pass the same
+/// [`EpisodeInput::id`] every time: the retry either completes the ingest
+/// exactly once or reports [`PipelineError::EpisodeExists`], which says the
+/// earlier attempt did land after all. Never duplicated, never orphaned.
 pub async fn add_episode<M: LanguageModel, E: Embedder>(
     grit: &Grit,
     model: &M,
@@ -214,11 +367,24 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
     options: &AddEpisodeOptions,
     now: DateTime<Utc>,
 ) -> Result<AddEpisodeOutcome, PipelineError> {
+    // Idempotency first, before any model or storage work: a caller
+    // retrying a failed ingest passes the id of the attempt it is retrying.
+    // The episode row is written in the same transaction as the graph
+    // mutations it evidences, so its presence means the whole ingest
+    // landed — there is nothing to complete and nothing to redo.
+    if let Some(id) = episode.id
+        && grit.episode(id)?.is_some()
+    {
+        return Err(PipelineError::EpisodeExists(id));
+    }
+
     let episodes = std::slice::from_ref(episode);
 
     // Vectors persist under the embedder's identity (idempotent for a
     // same-dimension model; a dimension change fails loudly — grit has no
-    // re-embedding flow yet).
+    // re-embedding flow yet). The one write outside this episode's batch:
+    // it creates empty vector tables, holds no graph state, and costs
+    // nothing if the episode then fails.
     let embedder_meta = embedder.meta();
     grit.register_embedding_model(
         &embedder_meta.model_id,
@@ -231,9 +397,11 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
         extract::nodes::extract_nodes(model, episodes, previous_episodes, &options.extract_nodes)
             .await?;
 
-    // Snapshot the group's nodes BEFORE persisting this episode's drafts:
+    // Snapshot the group's nodes BEFORE this episode's drafts are planned:
     // upstream dedups extractions against the existing graph only
-    // (within-batch dups were already collapsed at extraction).
+    // (within-batch dups were already collapsed at extraction). Committed
+    // state IS the pre-episode graph here — this runs before the first
+    // pending op — so it stays a direct read, no overlay.
     let group_nodes = group_nodes_snapshot(grit, &episode.group_id)?;
 
     // 2. Per-draft dedup candidates, mirroring upstream's
@@ -252,6 +420,9 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
             // embed); only names with no vector yet go to the embedder —
             // sorted unique, mirroring the oracle harness's batch shape.
             // In a warm graph this loop makes zero embedder requests.
+            // Same invariant as the snapshot above: these are pre-episode
+            // rows, and no vector has been planned yet, so the committed
+            // read is the whole truth.
             let mut name_vectors: std::collections::HashMap<&str, Vec<f32>> =
                 std::collections::HashMap::new();
             for node in &group_nodes {
@@ -296,7 +467,10 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
         }
     }
 
-    // Persist the drafts now that candidates are pinned.
+    // Plan the draft nodes now that candidates are pinned. From here on
+    // every write is queued in `pending` and committed in one batch at
+    // step 8; reads that need to see queued writes go through the overlay.
+    let mut pending = Pending::new(now);
     let mut draft_ids: Vec<Uuid> = Vec::with_capacity(drafts.len());
     for draft in &drafts {
         let id = grit.new_id();
@@ -306,14 +480,17 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
             .find(|l| *l != "Entity")
             .cloned()
             .unwrap_or_else(|| "Entity".to_owned());
-        grit.apply(GraphOp::AddNode {
-            id,
-            kind,
-            name: draft.name.clone(),
-            summary: draft.summary.clone(),
-            attrs: json!({"labels": draft.labels}),
-            group_id: draft.group_id.clone(),
-        })?;
+        pending.push(
+            grit,
+            GraphOp::AddNode {
+                id,
+                kind,
+                name: draft.name.clone(),
+                summary: draft.summary.clone(),
+                attrs: json!({"labels": draft.labels}),
+                group_id: draft.group_id.clone(),
+            },
+        )?;
         draft_ids.push(id);
     }
 
@@ -335,15 +512,22 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
         match &resolution.duplicate_of {
             Some(existing) => {
                 let into: Uuid = existing.id.parse().expect("grit ids round-trip");
-                grit.apply(GraphOp::MergeNodes {
-                    from: draft_id,
-                    into,
-                })?;
+                pending.push(
+                    grit,
+                    GraphOp::MergeNodes {
+                        from: draft_id,
+                        into,
+                    },
+                )?;
                 merges.push((draft_id, into));
                 // Persist label promotion (the resolution's labels already
                 // carry it): upstream re-saves the hydrated node; grit's
                 // equivalent is an UpdateNode, skipped when nothing changed.
-                let stored = grit.node(into)?.expect("canonical node exists");
+                // Overlay read: `into` is committed, but an EARLIER draft of
+                // this same episode may already have promoted it — that
+                // promotion is still pending, and re-emitting it would be a
+                // duplicate op.
+                let stored = pending.node(grit, into)?.expect("canonical node exists");
                 if labels_of(&stored) != existing.labels {
                     let kind = existing
                         .labels
@@ -356,13 +540,16 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
                         _ => serde_json::Map::new(),
                     };
                     attrs.insert("labels".into(), json!(existing.labels));
-                    grit.apply(GraphOp::UpdateNode {
-                        id: into,
-                        name: None,
-                        summary: None,
-                        kind: Some(kind),
-                        attrs: Some(serde_json::Value::Object(attrs)),
-                    })?;
+                    pending.push(
+                        grit,
+                        GraphOp::UpdateNode {
+                            id: into,
+                            name: None,
+                            summary: None,
+                            kind: Some(kind),
+                            attrs: Some(serde_json::Value::Object(attrs)),
+                        },
+                    )?;
                 }
                 final_ids.push(into);
                 // Edge extraction sees the EXTRACTED name (upstream passes
@@ -435,7 +622,9 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
     }
 
     // 5. Resolve each edge against stored context and apply the decisions.
-    let episode_id = grit.new_id();
+    // The episode's identity is the caller's when it supplied one (checked
+    // free above), minted here otherwise.
+    let episode_id = episode.id.unwrap_or_else(|| grit.new_id());
     let episode_ref = EpisodeRef {
         id: episode_id.to_string(),
         valid_at: episode.valid_at.clone(),
@@ -463,7 +652,9 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
     // edges are dedup candidates ("related", upstream's get_between_nodes);
     // the rest of the group is the invalidation pool (engine-free stand-in
     // for upstream's relevance-truncated hybrid search — see DEVIATIONS.md
-    // "Edge dedup/invalidation candidate pools").
+    // "Edge dedup/invalidation candidate pools"). Direct committed read
+    // for the same reason: no edge op has been queued yet, and the merges
+    // queued above move no edges (a draft node has none).
     let group_edges = grit.edges_in_group(&episode.group_id)?;
 
     for draft_edge in &draft_edges {
@@ -524,6 +715,9 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
                     .iter()
                     .any(|(id, _)| *id == existing_uuid)
                 {
+                    // `existing_uuid` comes from the pre-episode edge
+                    // snapshot and this episode has queued no op against
+                    // it (first-wins guard above), so committed is current.
                     let stored_invalid = grit
                         .edge(existing_uuid)?
                         .map(|e| e.invalid_at)
@@ -540,19 +734,24 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
                 // An extraction-time invalid_at rides on the edge itself —
                 // a bounded fact, not a belief retraction; it leaves no
                 // invalidation record (upstream: expired_at stays NULL).
-                grit.apply(GraphOp::AddEdge {
-                    id: edge_id,
-                    src,
-                    dst,
-                    rel: draft_edge.name.clone(),
-                    fact: draft_edge.fact.clone(),
-                    attrs: json!({}),
-                    group_id: draft_edge.group_id.clone(),
-                    valid_at: resolution.resolved.valid_at.map(|t| t.timestamp_millis()),
-                    invalid_at: resolution.resolved.invalid_at.map(|t| t.timestamp_millis()),
-                })?;
+                pending.push(
+                    grit,
+                    GraphOp::AddEdge {
+                        id: edge_id,
+                        src,
+                        dst,
+                        rel: draft_edge.name.clone(),
+                        fact: draft_edge.fact.clone(),
+                        attrs: json!({}),
+                        group_id: draft_edge.group_id.clone(),
+                        valid_at: resolution.resolved.valid_at.map(|t| t.timestamp_millis()),
+                        invalid_at: resolution.resolved.invalid_at.map(|t| t.timestamp_millis()),
+                    },
+                )?;
+                // Queued right behind its edge: the batch commits items in
+                // order, so the row exists by the time the vector lands.
                 if let Some(vector) = fact_vectors.get(draft_edge.fact.as_str()) {
-                    grit.set_edge_embedding(edge_id, vector.clone())?;
+                    pending.push_edge_embedding(edge_id, vector.clone());
                 }
                 new_edge_ids.push(edge_id);
                 mentioned_edges.push(edge_id);
@@ -578,10 +777,13 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
         let Some(invalid_at) = invalid_at else {
             continue; // blocker only — no temporal change decided
         };
-        grit.apply(GraphOp::InvalidateEdge {
-            edge_id,
-            invalid_at,
-        })?;
+        pending.push(
+            grit,
+            GraphOp::InvalidateEdge {
+                edge_id,
+                invalid_at,
+            },
+        )?;
         invalidated_edge_ids.push(edge_id);
     }
 
@@ -594,7 +796,10 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
     //    propagating same-id summaries; entries here are per-draft.
     let mut summarize_nodes: Vec<SummarizeNode> = Vec::new();
     for &id in &final_ids {
-        let stored = grit.node(id)?.expect("resolved node exists");
+        // Overlay read: most of these ids are drafts added moments ago
+        // (they exist only in the batch), and a canonical one may carry a
+        // pending label promotion.
+        let stored = pending.node(grit, id)?.expect("resolved node exists");
         let mut attributes = match &stored.attrs {
             serde_json::Value::Object(map) => map.clone(),
             _ => serde_json::Map::new(),
@@ -627,15 +832,20 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
         if !updated_ids.insert(id) {
             continue; // repeated draft entries carry the same propagated summary
         }
-        let stored = grit.node(id)?.expect("resolved node exists");
+        // Overlay read again: the summary being diffed is the one the
+        // batch will store, not the one storage still shows.
+        let stored = pending.node(grit, id)?.expect("resolved node exists");
         if stored.summary != node.summary {
-            grit.apply(GraphOp::UpdateNode {
-                id,
-                name: None,
-                summary: Some(node.summary.clone()),
-                kind: None,
-                attrs: None,
-            })?;
+            pending.push(
+                grit,
+                GraphOp::UpdateNode {
+                    id,
+                    name: None,
+                    summary: Some(node.summary.clone()),
+                    kind: None,
+                    attrs: None,
+                },
+            )?;
         }
     }
 
@@ -650,7 +860,8 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
     let mut name_inputs: Vec<String> = Vec::with_capacity(final_ids.len());
     let mut name_targets: Vec<Uuid> = Vec::with_capacity(final_ids.len());
     for &id in &final_ids {
-        let name = grit.node(id)?.expect("resolved node exists").name;
+        // Overlay read: a draft node's name lives in the batch only.
+        let name = pending.node(grit, id)?.expect("resolved node exists").name;
         if !name.is_empty() {
             name_inputs.push(name);
             name_targets.push(id);
@@ -658,11 +869,13 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
     }
     if !name_inputs.is_empty() {
         for (&id, vector) in name_targets.iter().zip(embedder.embed(&name_inputs).await?) {
-            grit.set_node_embedding(id, vector)?;
+            pending.push_node_embedding(id, vector);
         }
     }
 
-    // 8. The episode itself, with provenance for everything it evidenced.
+    // 8. The episode itself, with provenance for everything it evidenced,
+    //    and then the commit: the whole episode in a single transaction.
+    //    Everything above this line was a decision, not a write.
     let occurred_at = episode
         .valid_at
         .as_deref()
@@ -671,15 +884,19 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
     let mut mentions: Vec<Uuid> = final_ids.clone();
     mentions.extend(&mentioned_edges);
     mentions.dedup();
-    grit.apply(GraphOp::AddEpisode {
-        id: episode_id,
-        source: episode.source_description.clone(),
-        kind: episode.source.as_str().into(),
-        content: episode.content.clone(),
-        occurred_at,
-        group_id: episode.group_id.clone(),
-        mentions,
-    })?;
+    pending.push(
+        grit,
+        GraphOp::AddEpisode {
+            id: episode_id,
+            source: episode.source_description.clone(),
+            kind: episode.source.as_str().into(),
+            content: episode.content.clone(),
+            occurred_at,
+            group_id: episode.group_id.clone(),
+            mentions,
+        },
+    )?;
+    grit.apply_batch(pending.items)?;
 
     Ok(AddEpisodeOutcome {
         episode_id,
@@ -741,6 +958,7 @@ mod tests {
 
     fn episode(name: &str, content: &str, valid_at: &str) -> EpisodeInput {
         EpisodeInput {
+            id: None,
             name: name.into(),
             content: content.into(),
             source: EpisodeSource::Message,
@@ -1049,5 +1267,305 @@ mod tests {
         assert!(json.is_empty(), "no json episodes stored");
         drop(grit);
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// A model scripted by response-schema name, recording every request it
+    /// is shown. The golden traces never exercise label promotion (it fires
+    /// in neither trace), so the overlay needs a purpose-built driver;
+    /// reconstructing exact prompts for a `ReplayModel` would only obscure
+    /// what this test is about.
+    struct ScriptModel {
+        responses: Vec<(&'static str, Value)>,
+        seen: std::sync::Mutex<Vec<Value>>,
+    }
+
+    impl ScriptModel {
+        fn new(responses: Vec<(&'static str, Value)>) -> Self {
+            Self {
+                responses,
+                seen: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+
+        /// The rendered prompt of the single request issued for
+        /// `schema_name` — what the pipeline actually showed the model.
+        fn prompt_for(&self, schema_name: &str) -> String {
+            let seen = self.seen.lock().expect("script log lock");
+            let matching: Vec<&Value> = seen
+                .iter()
+                .filter(|request| request["schema_name"] == schema_name)
+                .collect();
+            assert_eq!(
+                matching.len(),
+                1,
+                "expected exactly one {schema_name} request, saw {}",
+                matching.len()
+            );
+            matching[0]["messages"].to_string()
+        }
+    }
+
+    impl LanguageModel for ScriptModel {
+        fn complete(
+            &self,
+            request: &CompletionRequest,
+        ) -> impl std::future::Future<Output = Result<Value, ModelError>> + Send {
+            self.seen
+                .lock()
+                .expect("script log lock")
+                .push(serde_json::to_value(request).expect("request serializes"));
+            let result = self
+                .responses
+                .iter()
+                .find(|(schema, _)| *schema == request.schema_name)
+                .map(|(_, response)| response.clone())
+                .ok_or_else(|| ModelError::ReplayMiss {
+                    canonical_request: request.schema_name.clone(),
+                });
+            async move { result }
+        }
+    }
+
+    /// Every input embeds to the same vector, so cosine is 1.0 everywhere
+    /// and every stored node is a dedup candidate for every draft: the
+    /// candidate pool becomes a property of the fixture, not of a hash.
+    struct ConstEmbedder;
+
+    impl Embedder for ConstEmbedder {
+        fn meta(&self) -> EmbedderMeta {
+            EmbedderMeta {
+                model_id: "const-test".into(),
+                dim: 3,
+                model_version: String::new(),
+            }
+        }
+
+        async fn embed(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>, ModelError> {
+            Ok(inputs.iter().map(|_| vec![1.0, 1.0, 1.0]).collect())
+        }
+    }
+
+    /// One readable line per op: the tag plus the fields this test pins.
+    fn op_line(op: &GraphOp, alias: &dyn Fn(Uuid) -> String) -> String {
+        let list = |ids: &[Uuid]| {
+            ids.iter()
+                .map(|id| alias(*id))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        match op {
+            GraphOp::AddNode { id, kind, name, .. } => {
+                format!("AddNode {} kind={kind} name={name}", alias(*id))
+            }
+            GraphOp::MergeNodes { from, into } => {
+                format!("MergeNodes {}->{}", alias(*from), alias(*into))
+            }
+            GraphOp::UpdateNode {
+                id,
+                summary,
+                kind,
+                attrs,
+                ..
+            } => format!(
+                "UpdateNode {} kind={} attrs={} summary={}",
+                alias(*id),
+                kind.as_deref().unwrap_or("-"),
+                attrs
+                    .as_ref()
+                    .map_or_else(|| "-".to_owned(), |a| a["labels"].to_string()),
+                summary.as_deref().unwrap_or("-"),
+            ),
+            GraphOp::AddEdge { id, src, dst, .. } => {
+                format!("AddEdge {} {}->{}", alias(*id), alias(*src), alias(*dst))
+            }
+            GraphOp::InvalidateEdge { edge_id, .. } => {
+                format!("InvalidateEdge {}", alias(*edge_id))
+            }
+            GraphOp::AddEpisode { id, mentions, .. } => {
+                format!("AddEpisode {} mentions=[{}]", alias(*id), list(mentions))
+            }
+            other => format!("{other:?}"),
+        }
+    }
+
+    /// Two drafts resolve onto ONE stored node, the first promoting its
+    /// labels: every read the rest of the pipeline makes about that node
+    /// must see the promotion even though nothing is committed yet.
+    ///
+    /// This is the overlay's contract, and the golden traces cannot state
+    /// it — label promotion fires in neither trace. What the assertions
+    /// pin, beyond the exact op sequence: the SECOND resolution sees the
+    /// promoted labels (no duplicate `UpdateNode`), the summarize inputs
+    /// carry them (and the stored summary the promotion did not touch),
+    /// and a node created earlier in the same episode is readable for its
+    /// summary diff (it exists only in the overlay until the batch lands).
+    #[tokio::test]
+    async fn overlay_serves_pending_writes_within_one_episode() {
+        const GROUP: &str = "overlay-test";
+        // Long enough to defeat the fact-append shortcut (> 2 ×
+        // MAX_SUMMARY_CHARS), so the summarize step really issues a
+        // request we can inspect. The marker proves the overlay kept the
+        // fields the label promotion did not write.
+        let stored_summary = format!(
+            "Prior summary about chartreuse kilns. {}",
+            "x".repeat(2_100)
+        );
+
+        let dir = std::env::temp_dir().join(format!("nacre-overlay-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("overlay.db");
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+        }
+        let grit = Grit::open(&path, Options::new("nacre-test")).unwrap();
+
+        // A node stored by an earlier episode: generic label, own summary.
+        let canonical = grit.new_id();
+        grit.apply(GraphOp::AddNode {
+            id: canonical,
+            kind: "Entity".into(),
+            name: "Priya Raman".into(),
+            summary: stored_summary,
+            attrs: json!({"labels": ["Entity"]}),
+            group_id: GROUP.into(),
+        })
+        .unwrap();
+        let baseline_seq = grit.oplog_since(0).unwrap().last().unwrap().0;
+
+        // Entity types with an EMPTY description keep "Person" out of the
+        // summarize prompt's type-description block, so its appearance
+        // there can only come from the promoted labels.
+        let opts = AddEpisodeOptions {
+            extract_nodes: ExtractNodesOptions {
+                entity_types: vec![EntityTypeSpec {
+                    name: "Person".into(),
+                    description: String::new(),
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut episode = episode(
+            "ep-overlay",
+            "Priya-Raman started at Northwind Labs today.",
+            "2026-07-10T12:00:00+00:00",
+        );
+        episode.group_id = GROUP.into();
+
+        let model = ScriptModel::new(vec![
+            // Two spellings of the same person plus one new entity. The
+            // spellings differ under exact normalization (the hyphen
+            // survives) so extraction keeps both drafts; they converge on
+            // the stored node through the exact and the fuzzy path.
+            (
+                "ExtractedEntities",
+                json!({"extracted_entities": [
+                    {"name": "Priya Raman", "entity_type_id": 1, "episode_indices": [0]},
+                    {"name": "Priya-Raman", "entity_type_id": 1, "episode_indices": [0]},
+                    {"name": "Northwind Labs", "entity_type_id": 0, "episode_indices": [0]},
+                ]}),
+            ),
+            // Only "Northwind Labs" escalates; -1 means "no duplicate".
+            (
+                "NodeResolutions",
+                json!({"entity_resolutions": [
+                    {"id": 0, "name": "Northwind Labs", "duplicate_candidate_id": -1},
+                ]}),
+            ),
+            (
+                "ExtractedEdges",
+                json!({"edges": [{
+                    "source_entity_name": "Priya Raman",
+                    "target_entity_name": "Northwind Labs",
+                    "relation_type": "WORKS_AT",
+                    "fact": "Priya Raman joined Northwind Labs.",
+                    "valid_at": "2026-07-10T00:00:00Z",
+                    "episode_indices": [0],
+                }]}),
+            ),
+            (
+                "SummarizedEntities",
+                json!({"summaries": [
+                    {"name": "Priya Raman", "summary": "Priya Raman works at Northwind Labs."},
+                ]}),
+            ),
+        ]);
+
+        let out = add_episode(&grit, &model, &ConstEmbedder, &episode, &[], &opts, now())
+            .await
+            .unwrap();
+
+        // Both Priya drafts folded into the stored node; the third is new.
+        assert_eq!(out.merges.len(), 2, "both drafts resolved onto one node");
+        assert_eq!(out.node_ids, vec![canonical, canonical, out.node_ids[2]]);
+        let (draft1, draft2) = (out.merges[0].0, out.merges[1].0);
+        let northwind = out.node_ids[2];
+        let edge = out.new_edge_ids[0];
+        let episode_id = out.episode_id;
+        let alias = move |id: Uuid| -> String {
+            match id {
+                _ if id == canonical => "canonical".to_owned(),
+                _ if id == draft1 => "draft1".to_owned(),
+                _ if id == draft2 => "draft2".to_owned(),
+                _ if id == northwind => "northwind".to_owned(),
+                _ if id == edge => "edge".to_owned(),
+                _ if id == episode_id => "episode".to_owned(),
+                other => other.to_string(),
+            }
+        };
+
+        let ops: Vec<String> = grit
+            .oplog_since(baseline_seq)
+            .unwrap()
+            .iter()
+            .map(|(_, entry)| op_line(&entry.op, &alias))
+            .collect();
+        assert_eq!(
+            ops,
+            vec![
+                "AddNode draft1 kind=Person name=Priya Raman",
+                "AddNode draft2 kind=Person name=Priya-Raman",
+                "AddNode northwind kind=Entity name=Northwind Labs",
+                "MergeNodes draft1->canonical",
+                // Promotion, exactly once: the second resolution reads the
+                // overlay and finds the labels already promoted.
+                r#"UpdateNode canonical kind=Person attrs=["Entity","Person"] summary=-"#,
+                "MergeNodes draft2->canonical",
+                "AddEdge edge canonical->northwind",
+                "UpdateNode canonical kind=- attrs=- summary=Priya Raman works at Northwind Labs.",
+                // Readable only through the overlay: this node's row does
+                // not exist until the batch commits.
+                "UpdateNode northwind kind=- attrs=- summary=Priya Raman joined Northwind Labs.",
+                "AddEpisode episode mentions=[canonical,northwind,edge]",
+            ],
+            "the ops, and their order, are the same ones the sequential \
+             pipeline applied"
+        );
+
+        // The summarize step saw the promoted labels, and the summary the
+        // promotion left alone.
+        let summarize_prompt = model.prompt_for("SummarizedEntities");
+        assert!(
+            summarize_prompt.contains("Person"),
+            "summarize inputs must carry the pending label promotion"
+        );
+        assert!(
+            summarize_prompt.contains("chartreuse"),
+            "summarize inputs must carry the stored summary the promotion did not touch"
+        );
+
+        // Committed state matches what the reads were told mid-flight.
+        let stored = grit.node(canonical).unwrap().unwrap();
+        assert_eq!(stored.kind, "Person");
+        assert_eq!(labels_of(&stored), ["Entity", "Person"]);
+        assert_eq!(stored.summary, "Priya Raman works at Northwind Labs.");
+        assert!(grit.get_node_embedding(canonical).unwrap().is_some());
+        assert!(grit.get_node_embedding(northwind).unwrap().is_some());
+        assert!(grit.get_edge_embedding(edge).unwrap().is_some());
+
+        drop(grit);
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+        }
     }
 }

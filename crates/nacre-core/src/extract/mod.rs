@@ -11,6 +11,7 @@ pub mod nodes;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Where an episode came from — mirrors upstream `EpisodeType`, which picks
 /// the extraction prompt.
@@ -56,6 +57,16 @@ impl EpisodeSource {
 /// (not this module) converts between grit's typed timestamps and these.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EpisodeInput {
+    /// Caller-supplied episode identity — the ingest idempotency key.
+    ///
+    /// `None` (the default) mints a fresh id inside the pipeline. A caller
+    /// that retries a failed ingest should pass the SAME id both times:
+    /// [`crate::pipeline::add_episode`] rejects an id the graph already
+    /// holds with [`crate::pipeline::PipelineError::EpisodeExists`] before
+    /// doing any work, so a retry either completes the ingest exactly once
+    /// or says the first attempt already landed.
+    #[serde(default)]
+    pub id: Option<Uuid>,
     /// Human-readable episode name.
     pub name: String,
     /// Raw episode body.

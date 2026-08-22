@@ -54,6 +54,7 @@ fn trace_spec() -> Option<Value> {
 fn episode(spec: &Value, index: usize) -> Episode {
     let e = &spec["episodes"][index];
     Episode {
+        id: None,
         name: e["name"].as_str().unwrap().to_owned(),
         content: e["content"].as_str().unwrap().to_owned(),
         source: e["source"].as_str().map(str::to_owned),

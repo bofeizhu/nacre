@@ -14,7 +14,7 @@ crate-type = ["lib", "staticlib", "cdylib"]
 uniffi = "0.32"
 async-trait = "0.1"
 nacre-core = { path = "../nacre-core" }
-grit-core = "0.2"
+grit-core = "0.3"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 serde_json = "1.0"
 uuid = "1"

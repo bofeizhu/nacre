@@ -255,6 +255,7 @@ mod tests {
 
     fn episode(name: &str, content: &str, valid_at: &str) -> EpisodeInput {
         EpisodeInput {
+            id: None,
             name: name.into(),
             content: content.into(),
             source: EpisodeSource::Message,

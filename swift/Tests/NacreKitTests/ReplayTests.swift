@@ -146,6 +146,60 @@ final class ReplayTests: XCTestCase {
         }
     }
 
+    func testARetryUnderAStoredEpisodeIdIsRefused() async throws {
+        let trace = try Artifacts.requireTrace1()
+        let group = try XCTUnwrap(trace["group_id"] as? String)
+        let memory = try Memory.open(
+            path: temporaryMemoryPath("idempotent", cleanUp: self), deviceId: "swift-replay-test")
+        func replay(_ episode: Episode) async throws -> AddEpisodeResult {
+            try await memory.addEpisodeReplay(
+                episode: episode,
+                llmRecordingsPath: Artifacts.recordings("llm_recordings.json"),
+                embedderRecordingsPath: Artifacts.recordings("embedder_recordings.json"),
+                embedderSpec: traceSpec()
+            )
+        }
+
+        // A host that retries failed ingests owns the id: the same one on
+        // every attempt for the same episode.
+        let id = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+        var keyed = try episode(from: trace, index: 0)
+        keyed.id = id
+        let landed = try await replay(keyed)
+        XCTAssertEqual(landed.episodeId, id, "the supplied id IS the stored episode id")
+        let nodes = try memory.nodesInGroup(groupId: group).count
+
+        // The retry that arrives after its first attempt actually landed is
+        // refused, and refused before any model call: the episode row
+        // commits with the graph mutations it evidences, so a stored id
+        // means the whole ingest is already there.
+        do {
+            _ = try await replay(keyed)
+            XCTFail("a second ingest under a stored id must not write again")
+        } catch let error as NacreError {
+            guard case .EpisodeExists(let existing) = error else {
+                return XCTFail("expected .EpisodeExists, got \(error)")
+            }
+            XCTAssertEqual(existing, id, "the rejection names the id that was passed in")
+        }
+        XCTAssertEqual(try memory.episodesInGroup(groupId: group).count, 1, "no second episode row")
+        XCTAssertEqual(
+            try memory.nodesInGroup(groupId: group).count, nodes, "no second set of entities")
+
+        // A malformed key is a host bug, caught with the other arguments.
+        var malformed = try episode(from: trace, index: 1)
+        malformed.id = "not-a-uuid"
+        do {
+            _ = try await replay(malformed)
+            XCTFail("an id that is not a UUID is not an id")
+        } catch let error as NacreError {
+            guard case .InvalidInput(let message) = error else {
+                return XCTFail("expected .InvalidInput, got \(error)")
+            }
+            XCTAssertTrue(message.hasPrefix("id \"not-a-uuid\""), message)
+        }
+    }
+
     func testTheBindingsLoadAndRejectInMemoryDatabases() throws {
         try Artifacts.requireBuildArtifacts()
         // Module-qualified: XCTestCase has a `version` of its own.

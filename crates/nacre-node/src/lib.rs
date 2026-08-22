@@ -18,7 +18,8 @@ use rows::{
 
 use nacre_core::extract::{EpisodeInput, EpisodeSource};
 use nacre_core::pipeline::{
-    AddEpisodeOptions, PREVIOUS_EPISODE_WINDOW, add_episode, retrieve_previous_episodes,
+    AddEpisodeOptions, PREVIOUS_EPISODE_WINDOW, PipelineError, add_episode,
+    retrieve_previous_episodes,
 };
 use nacre_core::search::search_edges;
 
@@ -28,9 +29,26 @@ pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
 
+/// Marks the one `addEpisode` rejection a caller is expected to branch on:
+/// the episode id it supplied is already stored, so that ingest already
+/// landed in full. Rejected errors start their message with this token
+/// followed by `": "` — match on it, never on the prose after it.
+///
+/// It rides in the message because napi derives a rejected error's `code`
+/// from its own closed `Status` enum: an async binding cannot put a
+/// domain-specific code there.
+#[napi]
+pub const EPISODE_EXISTS_CODE: &str = "EPISODE_EXISTS";
+
 /// One episode to ingest.
 #[napi(object)]
 pub struct EpisodeJs {
+    /// Optional caller-supplied episode id (a UUID string) — the ingest
+    /// idempotency key. Omit it and the pipeline mints one. A caller
+    /// retrying a failed ingest passes the SAME id every time: the ingest
+    /// either completes exactly once or rejects with EPISODE_EXISTS_CODE,
+    /// so a retry can never duplicate a partially written episode.
+    pub id: Option<String>,
     /// Short episode name (metadata only; not stored in the graph).
     pub name: String,
     /// Raw text of the episode.
@@ -63,6 +81,21 @@ pub struct AddEpisodeResultJs {
 
 fn generic(e: impl std::fmt::Display) -> Error {
     Error::new(Status::GenericFailure, e.to_string())
+}
+
+/// Pipeline failures, as JS sees them. Model and storage failures render
+/// exactly as before — a `GenericFailure` carrying the cause. The
+/// idempotency rejection is the one a caller branches on, so its message
+/// leads with [`EPISODE_EXISTS_CODE`] (see that constant for why the code
+/// is not in `error.code`).
+fn pipeline_error(e: PipelineError) -> Error {
+    match e {
+        PipelineError::EpisodeExists(id) => Error::new(
+            Status::GenericFailure,
+            format!("{EPISODE_EXISTS_CODE}: episode {id} already exists"),
+        ),
+        e @ (PipelineError::Model(_) | PipelineError::Storage(_)) => generic(e),
+    }
 }
 
 fn parse_time(iso: Option<&str>) -> Result<DateTime<Utc>> {
@@ -113,7 +146,19 @@ impl Memory {
             }
         };
         let now = parse_time(episode.valid_at.as_deref())?;
+        // Rejected before any model call or storage read, like every other
+        // argument: a malformed idempotency key is a caller bug, and the
+        // pipeline must not spend a request discovering it.
+        let id = episode
+            .id
+            .as_deref()
+            .map(|id| {
+                id.parse::<uuid::Uuid>()
+                    .map_err(|e| Error::new(Status::InvalidArg, format!("id {id:?}: {e}")))
+            })
+            .transpose()?;
         let input = EpisodeInput {
+            id,
             name: episode.name,
             content: episode.content,
             source,
@@ -144,7 +189,7 @@ impl Memory {
             now,
         )
         .await
-        .map_err(generic)?;
+        .map_err(pipeline_error)?;
         Ok(AddEpisodeResultJs {
             episode_id: outcome.episode_id.to_string(),
             node_ids: outcome.node_ids.iter().map(|id| id.to_string()).collect(),

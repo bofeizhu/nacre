@@ -34,6 +34,42 @@ toolchain installed — the addon is packaged only by `@napi-rs/cli`.
 - `scripts/live-smoke.mjs` — live end-to-end smoke (requires API keys and a
   `npm run build:live` build; never runs in `npm test`).
 
+## Ingestion idempotency
+
+`Memory.addEpisode` accepts an optional `id` (a UUID string) on the episode
+object — the idempotency key. Omit it and the pipeline mints one, as
+before. A caller that retries failed ingests passes the **same** id on
+every attempt for the same episode:
+
+```js
+const id = randomUUID();          // persisted by the caller, alongside the row it ingests
+try {
+  await memory.addEpisode({ id, content, sourceDescription, groupId }, llm, embedder);
+} catch (e) {
+  if (e.message.startsWith(`${EPISODE_EXISTS_CODE}: `)) {
+    // The earlier attempt landed after all — this episode is already in
+    // the graph, in full. Mark it done; do NOT ingest it again.
+  } else {
+    // Nothing was written (one episode, one transaction) — safe to retry
+    // with the same id.
+  }
+}
+```
+
+The whole ingest — nodes, merges, edges, invalidations, summaries,
+embeddings and the episode row — commits in one grit transaction, so a
+stored episode id means that ingest completed. A second attempt with a
+stored id is therefore rejected before any model call, rather than
+silently doing nothing: only the caller knows whether that is a retry
+landing late or a bug in its own bookkeeping.
+
+`EPISODE_EXISTS_CODE` is exported by the addon (`"EPISODE_EXISTS"`) and
+leads the rejection's message, followed by `": "`. It is not in
+`error.code`: napi derives that from its own closed `Status` enum, so an
+async binding cannot put a domain-specific code there. Match the prefix,
+never the prose after it. A malformed id rejects with `code`
+`"InvalidArg"` alongside the other argument errors.
+
 ## Providers
 
 `Memory.addEpisode` / `Memory.searchEdges` take `LlmConfig` / `EmbedderConfig`

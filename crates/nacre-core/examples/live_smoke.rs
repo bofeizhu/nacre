@@ -24,6 +24,7 @@ const GROUP: &str = "smoke";
 
 fn episode(name: &str, content: &str, at: &str) -> EpisodeInput {
     EpisodeInput {
+        id: None,
         name: name.into(),
         content: content.into(),
         source: EpisodeSource::Message,

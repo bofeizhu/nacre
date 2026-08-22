@@ -13,8 +13,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '..');
 
 let Memory;
+let EPISODE_EXISTS_CODE;
 try {
-  ({ Memory } = await import(path.join(root, 'index.js')));
+  ({ Memory, EPISODE_EXISTS_CODE } = await import(path.join(root, 'index.js')));
 } catch {
   console.warn('SKIP: nacre-node addon not built — run `npm run build` first');
 }
@@ -32,9 +33,10 @@ const replayEmb = {
   recordingsPath: path.join(fixtures, 'embedder_recordings.json'),
 };
 
-function ingest(m, ep) {
+function ingest(m, ep, id) {
   return m.addEpisode(
     {
+      id,
       name: ep.name,
       content: ep.content,
       sourceDescription: ep.source_description,
@@ -103,6 +105,51 @@ test('write, read, and search through the FFI (replay, offline)', { skip: !Memor
     () => m.searchEdges('an unrecorded query', spec.group_id, 3, replayEmb),
     /no recording matches/,
     'replay refuses to guess',
+  );
+
+  fs.unlinkSync(dbPath);
+});
+
+test('a caller-supplied id makes ingestion idempotent', { skip: !Memory }, async () => {
+  // Its own file: two tests sharing one database path collide.
+  const dbPath = path.join(os.tmpdir(), `nacre-node-idempotent-${process.pid}.db`);
+  try { fs.unlinkSync(dbPath); } catch {}
+  const m = Memory.open(dbPath, 'node-test');
+
+  // A caller that retries failed ingests owns the id — the same one on
+  // every attempt for the same episode.
+  const id = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
+  const first = await ingest(m, spec.episodes[0], id);
+  assert.equal(first.episodeId, id, 'the supplied id IS the stored episode id');
+  const nodes = m.nodesInGroup(spec.group_id).length;
+
+  // The retry that arrives after the first attempt actually landed is
+  // refused, and refused BEFORE any work: the episode row commits with the
+  // graph mutations it evidences, so its presence means the whole ingest
+  // is already there.
+  await assert.rejects(
+    () => ingest(m, spec.episodes[0], id),
+    (err) => {
+      assert.equal(
+        err.message.split(': ')[0],
+        EPISODE_EXISTS_CODE,
+        `the rejection leads with the stable code: ${err.message}`,
+      );
+      assert.ok(err.message.includes(id), err.message);
+      return true;
+    },
+  );
+  assert.equal(m.episodesInGroup(spec.group_id).length, 1, 'no second episode row');
+  assert.equal(m.nodesInGroup(spec.group_id).length, nodes, 'no second set of entities');
+
+  // A malformed key is a caller bug, caught with the argument errors.
+  await assert.rejects(
+    () => ingest(m, spec.episodes[0], 'not-a-uuid'),
+    (err) => {
+      assert.equal(err.code, 'InvalidArg');
+      assert.match(err.message, /^id "not-a-uuid":/);
+      return true;
+    },
   );
 
   fs.unlinkSync(dbPath);

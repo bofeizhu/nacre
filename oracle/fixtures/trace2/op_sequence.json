@@ -1,0 +1,726 @@
+{
+  "trace": "trace2",
+  "group_id": "trace2",
+  "placeholders": "UUIDs replaced by $nK, K = order of first appearance across the trace",
+  "episodes": [
+    {
+      "episode": "ep-0",
+      "op_count": 15,
+      "ops": [
+        {
+          "op": "add_node",
+          "id": "$n0",
+          "kind": "Entity",
+          "name": "Dana",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n1",
+          "kind": "Entity",
+          "name": "Leo",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n2",
+          "kind": "Entity",
+          "name": "Harborview Robotics",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n3",
+          "kind": "Entity",
+          "name": "Elena Vasquez",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n4",
+          "kind": "Entity",
+          "name": "Atlas arm demo",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n5",
+          "kind": "Entity",
+          "name": "Lisbon",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_edge",
+          "id": "$n6",
+          "src": "$n2",
+          "dst": "$n3",
+          "rel": "HAS_CEO",
+          "fact": "Elena Vasquez is the CEO of Harborview Robotics.",
+          "attrs": {},
+          "group_id": "trace2",
+          "valid_at": 1777889700000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n7",
+          "src": "$n2",
+          "dst": "$n5",
+          "rel": "BASED_IN",
+          "fact": "Harborview Robotics is based in Lisbon.",
+          "attrs": {},
+          "group_id": "trace2",
+          "valid_at": null,
+          "invalid_at": null
+        },
+        {
+          "op": "update_node",
+          "id": "$n0",
+          "summary": "Dana asked Leo if he saw that Harborview Robotics raised a Series B and that their CEO Elena Vasquez was on a funding panel the previous week."
+        },
+        {
+          "op": "update_node",
+          "id": "$n1",
+          "summary": "Leo responded that he saw the news about Harborview Robotics' Series B and commented that their Atlas arm demo was slick, and asked if they are based in Lisbon."
+        },
+        {
+          "op": "update_node",
+          "id": "$n2",
+          "summary": "Elena Vasquez is the CEO of Harborview Robotics.\nHarborview Robotics is based in Lisbon."
+        },
+        {
+          "op": "update_node",
+          "id": "$n3",
+          "summary": "Elena Vasquez is the CEO of Harborview Robotics."
+        },
+        {
+          "op": "update_node",
+          "id": "$n4",
+          "summary": "The Atlas arm demo from Harborview Robotics was described by Leo as slick."
+        },
+        {
+          "op": "update_node",
+          "id": "$n5",
+          "summary": "Harborview Robotics is based in Lisbon."
+        },
+        {
+          "op": "add_episode",
+          "id": "$n8",
+          "source": "chat between coworkers",
+          "kind": "message",
+          "content": "Dana: Did you see Harborview Robotics just raised a Series B? Their CEO Elena Vasquez was on the funding panel last week.\nLeo: Yeah — the Atlas arm demo was slick. They're based in Lisbon, right?",
+          "occurred_at": 1777889700000,
+          "group_id": "trace2",
+          "mentions": [
+            "$n0",
+            "$n1",
+            "$n2",
+            "$n3",
+            "$n4",
+            "$n5",
+            "$n6",
+            "$n7"
+          ]
+        }
+      ],
+      "embedded_nodes": [
+        "$n0",
+        "$n1",
+        "$n2",
+        "$n3",
+        "$n4",
+        "$n5"
+      ],
+      "embedded_edges": [
+        "$n6",
+        "$n7"
+      ]
+    },
+    {
+      "episode": "ep-1",
+      "op_count": 17,
+      "ops": [
+        {
+          "op": "add_node",
+          "id": "$n9",
+          "kind": "Entity",
+          "name": "Harborview Robotics",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n10",
+          "kind": "Entity",
+          "name": "Elena Vasquez",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n11",
+          "kind": "Entity",
+          "name": "Rafael Costa",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n12",
+          "kind": "Entity",
+          "name": "Atlas arm",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n9",
+          "into": "$n2"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n10",
+          "into": "$n3"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n12",
+          "into": "$n4"
+        },
+        {
+          "op": "add_edge",
+          "id": "$n13",
+          "src": "$n2",
+          "dst": "$n11",
+          "rel": "FOUNDED_BY",
+          "fact": "Harborview Robotics was founded in 2021 by Rafael Costa",
+          "attrs": {},
+          "group_id": "trace2",
+          "valid_at": 1609459200000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n14",
+          "src": "$n3",
+          "dst": "$n2",
+          "rel": "CEO_OF",
+          "fact": "Elena Vasquez serves as chief executive officer of Harborview Robotics",
+          "attrs": {},
+          "group_id": "trace2",
+          "valid_at": 1779267600000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n15",
+          "src": "$n11",
+          "dst": "$n2",
+          "rel": "CTO_OF",
+          "fact": "Rafael Costa serves as chief technology officer of Harborview Robotics",
+          "attrs": {},
+          "group_id": "trace2",
+          "valid_at": 1779267600000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n16",
+          "src": "$n2",
+          "dst": "$n4",
+          "rel": "DEVELOPS",
+          "fact": "Harborview Robotics' flagship product is the Atlas arm",
+          "attrs": {},
+          "group_id": "trace2",
+          "valid_at": 1779267600000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n17",
+          "src": "$n4",
+          "dst": "$n2",
+          "rel": "DEPLOYED_FOR",
+          "fact": "The Atlas arm is deployed in warehouse automation across Europe",
+          "attrs": {},
+          "group_id": "trace2",
+          "valid_at": 1779267600000,
+          "invalid_at": null
+        },
+        {
+          "op": "update_node",
+          "id": "$n2",
+          "summary": "Elena Vasquez is the CEO of Harborview Robotics.\nHarborview Robotics is based in Lisbon.\nHarborview Robotics was founded in 2021 by Rafael Costa\nElena Vasquez serves as chief executive officer of Harborview Robotics\nRafael Costa serves as chief technology officer of Harborview Robotics\nHarborview Robotics' flagship product is the Atlas arm\nThe Atlas arm is deployed in warehouse automation across Europe"
+        },
+        {
+          "op": "update_node",
+          "id": "$n3",
+          "summary": "Elena Vasquez is the CEO of Harborview Robotics.\nElena Vasquez serves as chief executive officer of Harborview Robotics"
+        },
+        {
+          "op": "update_node",
+          "id": "$n11",
+          "summary": "Harborview Robotics was founded in 2021 by Rafael Costa\nRafael Costa serves as chief technology officer of Harborview Robotics"
+        },
+        {
+          "op": "update_node",
+          "id": "$n4",
+          "summary": "The Atlas arm demo from Harborview Robotics was described by Leo as slick.\nHarborview Robotics' flagship product is the Atlas arm\nThe Atlas arm is deployed in warehouse automation across Europe"
+        },
+        {
+          "op": "add_episode",
+          "id": "$n18",
+          "source": "company profile document",
+          "kind": "text",
+          "content": "Harborview Robotics is a Lisbon-based robotics company founded in 2021 by Elena Vasquez and Rafael Costa. Vasquez serves as chief executive officer, while Costa is the chief technology officer. The company's flagship product, the Atlas arm, is deployed in warehouse automation across Europe.",
+          "occurred_at": 1779267600000,
+          "group_id": "trace2",
+          "mentions": [
+            "$n2",
+            "$n3",
+            "$n11",
+            "$n4",
+            "$n6",
+            "$n13",
+            "$n14",
+            "$n15",
+            "$n16",
+            "$n17"
+          ]
+        }
+      ],
+      "embedded_nodes": [
+        "$n0",
+        "$n1",
+        "$n2",
+        "$n3",
+        "$n4",
+        "$n5",
+        "$n11"
+      ],
+      "embedded_edges": [
+        "$n6",
+        "$n7",
+        "$n13",
+        "$n14",
+        "$n15",
+        "$n16",
+        "$n17"
+      ]
+    },
+    {
+      "episode": "ep-2",
+      "op_count": 18,
+      "ops": [
+        {
+          "op": "add_node",
+          "id": "$n19",
+          "kind": "Entity",
+          "name": "Harborview Robotics",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n20",
+          "kind": "Entity",
+          "name": "Atlas arm v2",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n21",
+          "kind": "Entity",
+          "name": "Web Summit",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n22",
+          "kind": "Entity",
+          "name": "Lisbon",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n23",
+          "kind": "Entity",
+          "name": "Rafael Costa",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n19",
+          "into": "$n2"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n20",
+          "into": "$n4"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n22",
+          "into": "$n5"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n23",
+          "into": "$n11"
+        },
+        {
+          "op": "add_edge",
+          "id": "$n24",
+          "src": "$n11",
+          "dst": "$n4",
+          "rel": "PRESENTED",
+          "fact": "Rafael Costa presented the product Atlas arm v2.",
+          "attrs": {},
+          "group_id": "trace2",
+          "valid_at": 1781136000000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n25",
+          "src": "$n21",
+          "dst": "$n5",
+          "rel": "HELD_IN",
+          "fact": "Web Summit was held in Lisbon.",
+          "attrs": {},
+          "group_id": "trace2",
+          "valid_at": 1781136000000,
+          "invalid_at": null
+        },
+        {
+          "op": "add_edge",
+          "id": "$n26",
+          "src": "$n2",
+          "dst": "$n21",
+          "rel": "PRESENTED_AT",
+          "fact": "Harborview Robotics presented at Web Summit.",
+          "attrs": {},
+          "group_id": "trace2",
+          "valid_at": 1781136000000,
+          "invalid_at": null
+        },
+        {
+          "op": "update_node",
+          "id": "$n2",
+          "summary": "Elena Vasquez is the CEO of Harborview Robotics.\nHarborview Robotics is based in Lisbon.\nHarborview Robotics was founded in 2021 by Rafael Costa\nElena Vasquez serves as chief executive officer of Harborview Robotics\nRafael Costa serves as chief technology officer of Harborview Robotics\nHarborview Robotics' flagship product is the Atlas arm\nThe Atlas arm is deployed in warehouse automation across Europe\nHarborview Robotics presented at Web Summit."
+        },
+        {
+          "op": "update_node",
+          "id": "$n4",
+          "summary": "The Atlas arm demo from Harborview Robotics was described by Leo as slick.\nHarborview Robotics' flagship product is the Atlas arm\nThe Atlas arm is deployed in warehouse automation across Europe\nRafael Costa presented the product Atlas arm v2."
+        },
+        {
+          "op": "update_node",
+          "id": "$n21",
+          "summary": "Web Summit was held in Lisbon.\nHarborview Robotics presented at Web Summit."
+        },
+        {
+          "op": "update_node",
+          "id": "$n5",
+          "summary": "Harborview Robotics is based in Lisbon.\nWeb Summit was held in Lisbon."
+        },
+        {
+          "op": "update_node",
+          "id": "$n11",
+          "summary": "Harborview Robotics was founded in 2021 by Rafael Costa\nRafael Costa serves as chief technology officer of Harborview Robotics\nRafael Costa presented the product Atlas arm v2."
+        },
+        {
+          "op": "add_episode",
+          "id": "$n27",
+          "source": "events calendar entry",
+          "kind": "json",
+          "content": "{\"event_type\": \"product_launch\", \"company\": \"Harborview Robotics\", \"product\": \"Atlas arm v2\", \"venue\": \"Web Summit\", \"city\": \"Lisbon\", \"presenter\": \"Rafael Costa\", \"date\": \"2026-06-11\"}",
+          "occurred_at": 1781188200000,
+          "group_id": "trace2",
+          "mentions": [
+            "$n2",
+            "$n4",
+            "$n21",
+            "$n5",
+            "$n11",
+            "$n16",
+            "$n24",
+            "$n25",
+            "$n26"
+          ]
+        }
+      ],
+      "embedded_nodes": [
+        "$n0",
+        "$n1",
+        "$n2",
+        "$n3",
+        "$n4",
+        "$n5",
+        "$n11",
+        "$n21"
+      ],
+      "embedded_edges": [
+        "$n6",
+        "$n7",
+        "$n13",
+        "$n14",
+        "$n15",
+        "$n16",
+        "$n17",
+        "$n24",
+        "$n25",
+        "$n26"
+      ]
+    },
+    {
+      "episode": "ep-3",
+      "op_count": 15,
+      "ops": [
+        {
+          "op": "add_node",
+          "id": "$n28",
+          "kind": "Entity",
+          "name": "Harborview Robotics",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n29",
+          "kind": "Entity",
+          "name": "Rafael Costa",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n30",
+          "kind": "Entity",
+          "name": "Porto",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "add_node",
+          "id": "$n31",
+          "kind": "Entity",
+          "name": "Elena Vasquez",
+          "summary": "",
+          "attrs": {
+            "labels": [
+              "Entity"
+            ]
+          },
+          "group_id": "trace2"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n28",
+          "into": "$n2"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n29",
+          "into": "$n11"
+        },
+        {
+          "op": "merge_nodes",
+          "from": "$n31",
+          "into": "$n3"
+        },
+        {
+          "op": "add_edge",
+          "id": "$n32",
+          "src": "$n11",
+          "dst": "$n2",
+          "rel": "STEPS_DOWN_AS",
+          "fact": "Rafael Costa steps down as chief technology officer at Harborview Robotics to start an independent research lab in Porto",
+          "attrs": {},
+          "group_id": "trace2",
+          "valid_at": null,
+          "invalid_at": 1782981900000
+        },
+        {
+          "op": "add_edge",
+          "id": "$n33",
+          "src": "$n3",
+          "dst": "$n2",
+          "rel": "OVERSEES",
+          "fact": "Elena Vasquez oversees the engineering organization at Harborview Robotics during the transition",
+          "attrs": {},
+          "group_id": "trace2",
+          "valid_at": 1782981900000,
+          "invalid_at": null
+        },
+        {
+          "op": "invalidate_edge",
+          "edge_id": "$n14",
+          "invalid_at": 1782981900000
+        },
+        {
+          "op": "update_node",
+          "id": "$n2",
+          "summary": "Elena Vasquez is the CEO of Harborview Robotics.\nHarborview Robotics is based in Lisbon.\nHarborview Robotics was founded in 2021 by Rafael Costa\nElena Vasquez serves as chief executive officer of Harborview Robotics\nRafael Costa serves as chief technology officer of Harborview Robotics\nHarborview Robotics' flagship product is the Atlas arm\nThe Atlas arm is deployed in warehouse automation across Europe\nHarborview Robotics presented at Web Summit.\nRafael Costa steps down as chief technology officer at Harborview Robotics to start an independent research lab in Porto\nElena Vasquez oversees the engineering organization at Harborview Robotics during the transition"
+        },
+        {
+          "op": "update_node",
+          "id": "$n11",
+          "summary": "Harborview Robotics was founded in 2021 by Rafael Costa\nRafael Costa serves as chief technology officer of Harborview Robotics\nRafael Costa presented the product Atlas arm v2.\nRafael Costa steps down as chief technology officer at Harborview Robotics to start an independent research lab in Porto"
+        },
+        {
+          "op": "update_node",
+          "id": "$n30",
+          "summary": "Porto is the location where Rafael Costa will start an independent research lab after stepping down as chief technology officer of Harborview Robotics."
+        },
+        {
+          "op": "update_node",
+          "id": "$n3",
+          "summary": "Elena Vasquez is the CEO of Harborview Robotics.\nElena Vasquez serves as chief executive officer of Harborview Robotics\nElena Vasquez oversees the engineering organization at Harborview Robotics during the transition"
+        },
+        {
+          "op": "add_episode",
+          "id": "$n34",
+          "source": "press note",
+          "kind": "text",
+          "content": "Harborview Robotics announced today that co-founder Rafael Costa is stepping down as chief technology officer to start an independent research lab in Porto. Chief executive Elena Vasquez will oversee the engineering organization during the transition.",
+          "occurred_at": 1782981900000,
+          "group_id": "trace2",
+          "mentions": [
+            "$n2",
+            "$n11",
+            "$n30",
+            "$n3",
+            "$n32",
+            "$n33"
+          ]
+        }
+      ],
+      "embedded_nodes": [
+        "$n0",
+        "$n1",
+        "$n2",
+        "$n3",
+        "$n4",
+        "$n5",
+        "$n11",
+        "$n21",
+        "$n30"
+      ],
+      "embedded_edges": [
+        "$n6",
+        "$n7",
+        "$n13",
+        "$n14",
+        "$n15",
+        "$n16",
+        "$n17",
+        "$n24",
+        "$n25",
+        "$n26",
+        "$n32",
+        "$n33"
+      ]
+    }
+  ]
+}
