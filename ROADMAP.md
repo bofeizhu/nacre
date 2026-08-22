@@ -844,11 +844,23 @@ what the traces expect.
       (regenerate via `scripts/build-swift.sh`; the M8 traps still apply —
       NacreFFI target at `.v5`, module name `nacre_swiftFFI`). Gates:
       Node 5/5, XCTest 9/9, both against the local grit patch.
-- [ ] Release: grit-core 0.3.0 to crates.io first, then bump nacre's
+- [x] Release: grit-core 0.3.0 to crates.io first, then bump nacre's
       requirement to `grit-core = "0.3"`, DELETE the `[patch.crates-io]`
       override (and let `Cargo.lock` follow), full gates against the
       registry, nacre-core 0.2.0 + tag + GitHub release with the
       xcframework (release-manifest flow, see M8).
+      → done 2026-08-22 (user-approved): grit-core/grit-compat 0.3.0 on
+      crates.io (grit tag v0.3.0); nacre re-gated against the registry
+      with the patch removed (cargo 104, Node 5/5, XCTest 9/9);
+      nacre-core 0.2.0 on crates.io; tag v0.2.0 on the release-manifest
+      commit (branch release/v0.2.0) with
+      https://github.com/bofeizhu/nacre/releases/tag/v0.2.0 carrying
+      nacre-xcframework-v0.2.0.zip (checksum in the notes); verified by a
+      bare scratch consumer resolving `from: "0.2.0"`, ingesting ep-0
+      under a caller id and getting `EpisodeExists` on the retry.
+      Open follow-up: the Node sidecar does not forward `id` or carry an
+      error code — a protocol addition for hosts that drive nacre through
+      it.
 
 Traps hit, worth remembering:
 
