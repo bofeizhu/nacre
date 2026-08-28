@@ -7,7 +7,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 0.2.0 predate this file; their notes live in the git tags
 (`v0.1.0` … `v0.1.2`) and the matching GitHub releases.
 
-## Unreleased
+## 0.3.0 — 2026-08-28
 
 ### Added
 

@@ -126,10 +126,7 @@ pub fn minhash_signature(shingle_set: &[String]) -> Vec<u64> {
 /// Split a signature into fixed-size LSH bands (partial bands dropped).
 // ports: dedup_helpers.py::_lsh_bands
 pub fn lsh_bands(signature: &[u64]) -> Vec<[u64; MINHASH_BAND_SIZE]> {
-    signature
-        .chunks_exact(MINHASH_BAND_SIZE)
-        .map(|chunk| chunk.try_into().expect("chunks_exact yields full bands"))
-        .collect()
+    signature.as_chunks::<MINHASH_BAND_SIZE>().0.to_vec()
 }
 
 /// Jaccard similarity between two shingle sets (both-empty counts as 1.0).
