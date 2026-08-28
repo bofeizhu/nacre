@@ -92,12 +92,18 @@ is what a UI should show a person. `deleteGroup` reports what it swept and
 treats an unknown group as a group with no rows: zero counts, nothing
 written.
 
-"Forgotten" means **unreachable through every read API and every index** —
-rows, update and invalidation records, provenance in both directions, FTS
-mirrors and stored vectors. It does not mean *gone from the file*: grit's
-op-log deliberately keeps the original ops, because it is the sync unit.
-An app that promises a person erasure must make that promise on its own
-terms.
+"Forgotten" means **gone from the live file** — rows, update and
+invalidation records, provenance in both directions, FTS mirrors, stored
+vectors, *and* the op-log entries that carried them, so no read, no export
+and no re-delivery from a peer brings the content back. The pages the
+purge frees are zeroed. Two limits worth knowing: FTS5 records a deletion
+by writing a new segment that re-encodes the terms, so "no byte remains"
+needs grit's `compact()` maintenance call, which this addon does not
+expose; and nothing here reaches OS backups or snapshots, copies taken
+before the delete, or a device that never receives the op (one that
+receives it erases on arrival). An app promising a person erasure still
+owns those. The tiers and their exact limits are stated in full on
+`nacre_core::forget`, and under it on grit's `Purge`.
 
 A deleted id is also **spent**: grit tombstones it permanently, so a later
 `addEpisode` naming it resolves as success while storing neither the

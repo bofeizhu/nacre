@@ -9,8 +9,9 @@
 //!   empty-`Purge` trap, the all-or-nothing batch, the enumeration
 //!   boundaries a group scan cannot cross (an edge written into another
 //!   group, a merge placeholder parked in the default group), the
-//!   documented non-guarantee that the op-log keeps what was purged, and
-//!   that a forgotten id is spent — re-using one is a silent no-op.
+//!   documented reach of the erasure into the op-log (the entries that
+//!   carried a purged id go; the ones that merely name it stay), and that a
+//!   forgotten id is spent — re-using one is a silent no-op.
 //! - **A golden trace replayed into two sibling groups of one database**
 //!   for the same laws over a graph the real pipeline wrote — merges,
 //!   invalidations, summary updates, mentions and vectors included. The
@@ -66,10 +67,14 @@ fn remove_db(path: &Path) {
 
 /// Everything about a group that a deletion could change: the rows
 /// themselves (every field, expired ones included), provenance in both
-/// directions, which ids hold a vector, and the oplog length.
+/// directions, which ids hold a vector, the total oplog length (a
+/// whole-database measure, so a purge elsewhere moves it), and the oplog
+/// entries that carried *this* group's content — which a purge of another
+/// group must leave verbatim.
 #[derive(Debug, PartialEq)]
 struct Snapshot {
     oplog: usize,
+    creator_ops: Vec<String>,
     nodes: Vec<Value>,
     edges: Vec<Value>,
     episodes: Vec<Value>,
@@ -97,8 +102,15 @@ fn snapshot(grit: &Grit, group_id: &str) -> Snapshot {
         .map(|e| (e.id, grit.episode_targets(e.id).unwrap()))
         .collect();
     targets.sort();
+    let group_ids: Vec<Uuid> = nodes
+        .iter()
+        .map(|n| n.id)
+        .chain(edges.iter().map(|e| e.id))
+        .chain(episodes.iter().map(|e| e.id))
+        .collect();
     Snapshot {
         oplog: grit.oplog_since(0).unwrap().len(),
+        creator_ops: creator_ops(grit, &group_ids),
         mentions,
         targets,
         embedded_nodes: nodes
@@ -119,6 +131,32 @@ fn snapshot(grit: &Grit, group_id: &str) -> Snapshot {
 
 fn to_value<T: serde::Serialize>(row: &T) -> Value {
     serde_json::to_value(row).unwrap()
+}
+
+/// The oplog entries whose op **created** one of `ids` — the entries that
+/// carry those ids' content, and exactly the ones grit's purge scrubs.
+/// Serialized, in log order.
+///
+/// Ops that merely *reference* an id (`InvalidateEdge`, `MergeNodes`,
+/// `Purge`, and the endpoint/mention fields of the ops above) are not
+/// creators: they are opaque uuids, they survive a purge by design, and
+/// they are what keeps grit's merge laws exact. This mirrors grit's own
+/// rule, which is not public API.
+fn creator_ops(grit: &Grit, ids: &[Uuid]) -> Vec<String> {
+    grit.oplog_since(0)
+        .unwrap()
+        .iter()
+        .filter(|(_, entry)| match &entry.op {
+            GraphOp::AddNode { id, .. }
+            | GraphOp::UpdateNode { id, .. }
+            | GraphOp::AddEdge { id, .. }
+            | GraphOp::AddEpisode { id, .. } => ids.contains(id),
+            GraphOp::InvalidateEdge { .. } | GraphOp::MergeNodes { .. } | GraphOp::Purge { .. } => {
+                false
+            }
+        })
+        .map(|(_, entry)| serde_json::to_string(&entry.op).unwrap())
+        .collect()
 }
 
 /// Every read API nacre or a binding exposes says the id is gone.
@@ -242,6 +280,11 @@ fn delete_group_erases_its_own_group_and_nothing_else() {
     let sibling = seed(&grit, "sibling", "Jordan", "Jordan teaches at Belmont.");
     let before_sibling = snapshot(&grit, "sibling");
     let oplog_before = grit.oplog_since(0).unwrap().len();
+    let carried = creator_ops(
+        &grit,
+        &[target.src, target.dst, target.edge, target.episode],
+    )
+    .len();
 
     let outcome = delete_group(&grit, "target").unwrap();
     assert_eq!(
@@ -261,19 +304,25 @@ fn delete_group_erases_its_own_group_and_nothing_else() {
         assert_unreachable(&grit, id);
     }
 
-    // One transaction, one audit record.
+    // One transaction, one audit record — and the log forgets with the
+    // rows: the entries that carried the four purged ids go in the same
+    // transaction, so the net change is one Purge minus what it scrubbed.
+    assert_eq!(carried, 4, "the seed wrote four content-bearing entries");
     assert_eq!(
         grit.oplog_since(0).unwrap().len(),
-        oplog_before + 1,
-        "a whole-group deletion is a single op"
+        oplog_before + 1 - carried,
+        "a whole-group deletion is a single op, and it takes the entries \
+         that carried what it forgot with it"
     );
 
     assert_eq!(
         snapshot(&grit, "sibling"),
         Snapshot {
-            // The sibling's own rows are untouched; only the shared oplog
-            // grew, by the one Purge asserted above.
-            oplog: before_sibling.oplog + 1,
+            // The sibling's own rows AND its own entries in the log are
+            // untouched — the scrub is keyed by id, and this is what
+            // proves it took only the right ones. All that moved is the
+            // shared log's length: plus the Purge, minus the scrub.
+            oplog: before_sibling.oplog + 1 - carried,
             ..before_sibling
         },
         "the sibling group must be byte-identical"
@@ -466,29 +515,51 @@ fn merge_placeholders_park_in_the_default_group_and_purging_one_wins() {
     remove_db(&path);
 }
 
-/// The guarantee is "unreachable through every read API and every index",
-/// not "gone from the file". grit keeps the original ops — the op-log is
-/// the sync unit and rewriting history would break the merge laws — so an
-/// application promising erasure to a person must promise it on its own
-/// terms. Pinned here so the claim is tested, not assumed.
+/// The erasure reaches the op-log, which is what lets nacre say "gone from
+/// the live file" rather than only "unreachable through every read API".
+/// grit deletes every entry whose op *created* a purged id in the purge's
+/// own transaction, so neither `oplog_since` nor an export can ship the
+/// content; what stays is the `Purge` itself, the audit record naming what
+/// was forgotten. Pinned here so the claim nacre repeats to its callers is
+/// tested, not inherited on trust.
 #[test]
-fn the_oplog_keeps_what_was_purged() {
-    let (grit, path) = open_db("oplog-retention");
+fn the_oplog_forgets_what_was_purged() {
+    let (grit, path) = open_db("oplog-scrub");
     const FACT: &str = "Priya works at Northwind Labs.";
     let target = seed(&grit, "target", "Priya", FACT);
+    let ids = vec![target.src, target.dst, target.edge, target.episode];
+    assert_eq!(
+        creator_ops(&grit, &ids).len(),
+        4,
+        "the seed wrote four content-bearing entries"
+    );
 
     delete_group(&grit, "target").unwrap();
     assert_unreachable(&grit, target.edge);
 
     let log = grit.oplog_since(0).unwrap();
     assert!(
-        log.iter()
+        !log.iter()
             .any(|(_, entry)| serde_json::to_string(&entry.op).unwrap().contains(FACT)),
-        "the op that first carried the fact stays in the log, by design"
+        "no surviving entry carries the forgotten fact"
     );
+    assert_eq!(log.len(), 1, "only the audit record is left");
+    match &log[0].1.op {
+        GraphOp::Purge { ids: purged } => assert_eq!(
+            sorted(purged.clone()),
+            sorted(ids),
+            "the purge stays, and still names every id it forgot"
+        ),
+        other => panic!("expected the purge as the audit record, got {other:?}"),
+    }
+
+    // Not just the live tables: the export is the other way out of the
+    // file, and it cannot ship what the log no longer holds.
+    let mut export = Vec::new();
+    grit.export_jsonl(&mut export).unwrap();
     assert!(
-        matches!(log.last().unwrap().1.op, GraphOp::Purge { .. }),
-        "and the purge itself is the audit record"
+        !String::from_utf8(export).unwrap().contains(FACT),
+        "and an export cannot carry it out either"
     );
 
     drop(grit);
@@ -915,6 +986,11 @@ async fn trace1_deletion_leaves_the_sibling_group_byte_identical() {
         .into_iter()
         .filter(|id| grit.mentions_of(*id).unwrap() == [last_episode])
         .collect();
+    let carried = {
+        let mut ids = sole_evidence.clone();
+        ids.push(last_episode);
+        creator_ops(&grit, &ids).len()
+    };
     let outcome = delete_episode(&grit, last_episode).unwrap();
     let purged: Vec<Uuid> = sorted(
         outcome
@@ -947,10 +1023,13 @@ async fn trace1_deletion_leaves_the_sibling_group_byte_identical() {
             "{id} must lose the deleted episode's provenance"
         );
     }
+    assert!(carried > 0, "the deleted episode's own entry alone carried");
     assert_eq!(
         snapshot(&grit, SIBLING),
         Snapshot {
-            oplog: sibling_before.oplog + 1,
+            // Only the shared log moved, by the Purge and the entries it
+            // scrubbed; the sibling's own entries are still there verbatim.
+            oplog: sibling_before.oplog + 1 - carried,
             ..sibling_before
         },
         "an episode deletion must not touch the sibling group"
@@ -958,6 +1037,7 @@ async fn trace1_deletion_leaves_the_sibling_group_byte_identical() {
     let sibling_before = snapshot(&grit, SIBLING);
 
     // --- Then the whole group. ---
+    let carried = snapshot(&grit, TARGET).creator_ops.len();
     let outcome = delete_group(&grit, TARGET).unwrap();
     assert!(grit.nodes_in_group(TARGET).unwrap().is_empty());
     assert!(grit.edges_in_group(TARGET).unwrap().is_empty());
@@ -985,7 +1065,7 @@ async fn trace1_deletion_leaves_the_sibling_group_byte_identical() {
     assert_eq!(
         snapshot(&grit, SIBLING),
         Snapshot {
-            oplog: sibling_before.oplog + 1,
+            oplog: sibling_before.oplog + 1 - carried,
             ..sibling_before
         },
         "the sibling group is byte-identical after both deletions"

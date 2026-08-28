@@ -76,12 +76,17 @@
 ///   ``NacreError/EpisodeExists(id:)``, which means the earlier attempt
 ///   landed in full — mark it done instead of ingesting it again. Omit the
 ///   id and a retry writes the episode twice.
-/// - **A forgotten id is spent, and forgetting is not erasure.**
+/// - **A forgotten id is spent, and forgetting reaches the live file only.**
 ///   ``Memory/deleteEpisode(id:)`` and ``Memory/deleteGroup(groupId:)``
-///   each commit one transaction, and what they promise is *unreachable
-///   through every read API and every index* — grit's op-log keeps the
-///   original ops, because it is the sync unit, so an app that promises a
-///   person erasure must make that promise on its own terms. The ids they
+///   each commit one transaction, and what they promise is *gone from the
+///   live file*: rows, indexes, stored vectors and the op-log entries that
+///   carried them, with the pages they free zeroed — so no read, no export
+///   and no re-delivery from a peer brings the content back. Two limits
+///   this package cannot lift: "no byte remains" needs grit's `compact()`
+///   maintenance call, which it does not expose, and device or OS backups,
+///   copies taken before the delete, and a device that never receives the
+///   op stay out of reach — one that receives it erases on arrival. An app
+///   promising a person erasure still owns those. The ids these two calls
 ///   name are tombstoned permanently: a later ingest under a deleted
 ///   episode id succeeds while storing neither the episode row nor its
 ///   provenance, leaving that ingest's nodes and edges evidenced by

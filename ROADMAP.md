@@ -911,15 +911,26 @@ could offer "delete this conversation" or "delete this workspace" only by
 deleting the whole file. Right-to-forget is not a feature that can be
 bolted on later by a host: only nacre knows which nodes and facts exist
 *because of* one episode and which ones survive it, and only grit can erase
-them without leaving an index entry behind. The same milestone carries
+them without leaving an index entry — or, since grit 0.4.0, a log entry —
+behind. The same milestone carries
 `EpisodeInput.metadata`, because the two answer the same question from
 opposite ends: an app that can delete a memory needs to know which of its
 own records that memory came from.
 
-Non-goals: op-log redaction (grit's guarantee is "unreachable through every
-read API", not "gone from the file" — a compacted export would be a new
-grit decision); a new golden trace (deletion is deterministic and needs no
-oracle — see the test note below); undo.
+Non-goals: a new golden trace (deletion is deterministic and needs no
+oracle — see the test note below); undo; anything that would make nacre
+promise more about erasure than grit does (the tiers, and their limits,
+are grit's to state — nacre repeats them, never widens them).
+
+Scoped out when the milestone opened and **since settled in grit**: op-log
+redaction. The guarantee nacre could inherit at the time was "unreachable
+through every read API", not "gone from the file", and a stronger one was
+a grit decision to make. Grit made it (0.4.0, 2026-08-28): a purge now
+scrubs the op-log entries that created the ids it forgets, refuses a
+re-delivered copy of one at ingest, zeroes the pages it frees, and keeps
+only the reference-carrying ops that make the merge laws exact. Nacre's
+deletion wording tracks that contract as of the same date — see the note
+below.
 
 - [x] `EpisodeInput.metadata: Option<String>` (`#[serde(default)]`),
       forwarded verbatim into `GraphOp::AddEpisode` and handed back by
@@ -969,12 +980,27 @@ oracle — see the test note below); undo.
       supervising non-Node parent drives, and `episode` is there only
       because `searchEdges` hands back provenance ids that would
       otherwise be unreadable over the protocol.
-- [ ] BLOCKED(needs the grit release): grit ships schema v6 (episode
-      metadata + `episode_targets`), then nacre bumps its `grit-core`
-      requirement, DROPS the `[patch.crates-io]` override, re-gates
-      against the registry and releases. Until then **this work stays
-      local** — CI resolves the published grit and every new test would
-      run red (the 2026-07-11 lesson).
+- [x] Deletion-contract wording tracks grit 0.4.0 (docs only — no
+      behavior change): `forget`'s module docs, both binding surfaces and
+      their READMEs, `NacreKit`'s usage rules, CHANGELOG and this file now
+      state the tiered promise (erased from the live file including the
+      op-log; freed pages zeroed, `compact()` for the byte-level finish;
+      backups, earlier copies and never-synced devices out of scope)
+      instead of "unreachable through every read API". The one test that
+      pinned the old non-guarantee inverted with it.
+      → done 2026-08-28. Gates: 113 cargo tests + 4 doctests (conformance
+      and op_sequence green on both traces against the local grit patch),
+      clippy `-D warnings` clean, fmt clean, `cargo doc` clean.
+- [ ] BLOCKED(needs the grit release): grit ships 0.4.0 — schema v6
+      (episode metadata + `episode_targets`) *and* the purge that scrubs
+      the op-log — then nacre bumps its `grit-core` requirement, DROPS the
+      `[patch.crates-io]` override, re-gates against the registry and
+      releases. Until then **this work stays local** — CI resolves the
+      published grit and every new test would run red (the 2026-07-11
+      lesson). Two dependencies now, not one: the metadata/targets API,
+      and the erasure semantics `tests/deletion.rs` asserts (a purge that
+      does not scrub leaves the log longer than the arithmetic there
+      expects, and the export check fails outright).
 
 Notes worth keeping:
 
@@ -989,6 +1015,26 @@ Notes worth keeping:
   sibling. Deleting one group must leave the sibling byte-identical —
   which is where a non-group-scoped index delete would show up, since the
   FTS mirrors and vector tables are shared.
+- **The deletion contract got stronger underneath us, and the wording had
+  to move with it (2026-08-28).** Grit's Phase 4 landed *after* this
+  milestone's code: `Purge` now erases the op-log entries that created the
+  ids it forgets (retroactively too, via a migration and
+  `Grit::scrub_purged()`), refuses a re-delivered copy of a scrubbed entry
+  at ingest, zeroes the pages it frees, and offers `Grit::compact()` for
+  the byte-level finish that FTS5's delete-marker segments would otherwise
+  defer. Nacre's code did not change — it emits the same single `Purge` —
+  but every place that told a caller what "forgotten" means did: the
+  `forget` module docs now carry grit's three tiers verbatim in nacre's
+  own terms, and both binding surfaces say "gone from the live file"
+  instead of "unreachable through every read API". Deliberately NOT
+  widened: neither binding exposes `compact()`, and the out-of-scope list
+  (OS backups, earlier copies, a device that never receives the op) is
+  repeated wherever the promise is made. The one test that pinned the old
+  non-guarantee flipped with it —
+  `the_oplog_keeps_what_was_purged` → `the_oplog_forgets_what_was_purged`,
+  now also asserting an export cannot carry the fact out — and the sibling
+  control gained `Snapshot::creator_ops`, which is what proves the scrub
+  is keyed by id and did not reach the untouched group's history.
 - **The empty `Purge` is a trap, not a nicety.** grit rejects
   `Purge { ids: [] }`, and `apply_batch` validates before it writes, so a
   deletion of an already-empty group would fail the whole batch instead of

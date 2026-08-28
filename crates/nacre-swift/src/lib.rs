@@ -586,10 +586,12 @@ impl Memory {
     // Deletion. Synchronous like the read path — no model call is
     // involved, only grit — but these are WRITES: each commits one
     // `Purge` in a single transaction, so a deletion happens whole or not
-    // at all. "Forgotten" means unreachable through every read API and
-    // every index; the op-log deliberately keeps the original ops (it is
-    // the sync unit), so a host that promises a person erasure must make
-    // that promise on its own terms (a compacted export, a rekeyed file).
+    // at all. "Forgotten" means gone from the live file: rows, indexes,
+    // vectors and the op-log entries that carried them, with the freed
+    // pages zeroed. What no library can reach — OS and device backups,
+    // copies taken earlier, a device that never receives the op — is
+    // documented on `nacre_core::forget`, alongside the maintenance call
+    // (`Grit::compact`) that finishes the byte-level job.
     // ------------------------------------------------------------------
 
     /// Forget one episode, and the graph that exists only because of it:

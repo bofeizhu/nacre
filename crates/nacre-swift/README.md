@@ -162,11 +162,18 @@ but both calls are **writes**, each committing a single grit `Purge` in
 one transaction, so a deletion happens whole or not at all. Two rules the
 type system cannot state:
 
-- **"Forgotten" means unreachable through every read API and every index**
-  (rows, update and invalidation records, provenance both ways, FTS
-  mirrors, stored vectors) — *not* gone from the file. grit's op-log keeps
-  the original ops by design: it is the sync unit. An app that promises a
-  person erasure must make that promise on its own terms.
+- **"Forgotten" means gone from the live file** — rows, update and
+  invalidation records, provenance both ways, FTS mirrors, stored vectors,
+  *and* the op-log entries that carried them, with the freed pages zeroed.
+  No read, no export and no re-delivery from a peer brings the content
+  back. Two limits: "no byte remains" needs grit's `compact()` maintenance
+  call (FTS5 re-encodes deleted terms into a new segment until the
+  segments merge), which this package does not expose; and OS or device
+  backups, copies taken earlier, and a device that never receives the op
+  are out of reach — one that receives it erases on arrival. An app
+  promising a person erasure still owns those. The tiers and their exact
+  limits are stated in full on `nacre_core::forget`, and under it on
+  grit's `Purge`.
 - **A deleted id is spent.** grit tombstones it permanently, so a later
   ingest naming it succeeds while storing neither the episode row nor its
   provenance, leaving that ingest's nodes and edges evidenced by nothing.

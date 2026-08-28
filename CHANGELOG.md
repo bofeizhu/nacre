@@ -21,11 +21,19 @@ Releases before 0.2.0 predate this file; their notes live in the git tags
   and nothing at all written when there is nothing to erase. Both return a
   typed report naming what went and (for an episode) what stayed.
   grit's purge erases the rows, their update and invalidation records,
-  provenance in both directions, every FTS mirror entry and every stored
-  vector — the guarantee is *unreachable through every read API and every
-  index*, not *gone from the file*: the op-log keeps the original ops by
-  design, since it is the sync unit. A forgotten id is also spent: purge
-  tombstones it permanently, and a later op naming it is a silent no-op.
+  provenance in both directions, every FTS mirror entry, every stored
+  vector **and the op-log entries that created those ids** — so the
+  content is gone from the live file, exports and re-delivery from a peer
+  included, and the freed pages are zeroed. Stated in full on
+  `nacre_core::forget` with the limits grit states and nacre cannot
+  improve on: "no byte remains" needs grit's `compact()` maintenance call
+  (FTS5 re-encodes deleted terms into a new segment until segments merge),
+  and OS backups, copies taken before the delete and devices that never
+  receive the `Purge` are out of scope — one that receives it erases on
+  arrival. Ops that merely *reference* a purged id stay, deliberately:
+  opaque uuids, content-free, and what keeps grit's merge laws exact. A
+  forgotten id is also spent: purge tombstones it permanently, and a later
+  op naming it is a silent no-op.
 - **`PipelineError::EpisodeNotFound(id)`** — the mirror of `EpisodeExists`,
   returned when the episode to delete is not stored (including a second
   delete of one already deleted). Reported rather than silently ignored:
@@ -40,7 +48,8 @@ Releases before 0.2.0 predate this file; their notes live in the git tags
   while silently storing neither the episode row nor its provenance.
 - `tests/deletion.rs`: the mechanical laws over hand-built state (group
   isolation, the empty-`Purge` trap, all-or-nothing batches, the
-  enumeration boundaries a group scan cannot cross, op-log retention) plus
+  enumeration boundaries a group scan cannot cross, the op-log scrub and
+  the export that cannot carry a purged fact out) plus
   a golden trace replayed into two sibling groups of one database — the
   sibling is the control that deleting one group must leave byte-identical.
 - **Both binding surfaces carry the deletion surface and `metadata`.**
@@ -65,6 +74,12 @@ Releases before 0.2.0 predate this file; their notes live in the git tags
 
 - grit-core with schema v6: `AddEpisode.metadata`, `Episode.metadata` and
   `Grit::episode_targets`.
+- grit-core 0.4.0's `Purge` for the deletion contract documented above:
+  the op-log scrub, the ingest refusal for a re-delivered scrubbed entry,
+  the zeroed pages and `Grit::compact()`. Against an older grit the code
+  behaves identically but the promise is the weaker one it superseded
+  (unreachable through every read API, the log retaining the original
+  ops) — which is why the docs and the release move together.
 
 ### Not yet
 

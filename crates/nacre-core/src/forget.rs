@@ -31,15 +31,40 @@
 //! being ported — but it is a gap, and the paragraph above it should not be
 //! read as covering the decision.
 //!
-//! **What "forgotten" means.** grit's purge erases the derived state — the
-//! rows, their per-field update and invalidation records, mention links in
-//! both directions, every FTS mirror entry and every stored vector — but
-//! deliberately does NOT rewrite the oplog, which is the sync unit. The
-//! guarantee is *unreachable through every read API and every index*, not
-//! *gone from the file*. An application that promises erasure to a person
-//! must make that promise on its own terms (a compacted export, a rekeyed
-//! file); it cannot inherit it from here. Both functions below repeat this
-//! where a caller will read it.
+//! **What "forgotten" means.** grit's purge is a tiered promise, stated
+//! there in full on `GraphOp::Purge`, and nacre inherits it whole — never
+//! more than it:
+//!
+//! 1. **Erased from the live file, the op-log included.** The derived state
+//!    goes — the rows, their per-field update and invalidation records,
+//!    mention links in both directions, every FTS mirror entry and every
+//!    stored vector — *and* so do the op-log entries that **created** the
+//!    purged ids, in the same transaction. Nothing reaches the content
+//!    through a read, through `oplog_since`, or through an export, and a
+//!    copy of a scrubbed entry re-delivered by a peer is refused at ingest
+//!    rather than re-logged. Entries that merely *reference* a purged id —
+//!    an edge's endpoints, an episode's mentions, a merge's pointers, the
+//!    `Purge` itself, which stays as the audit record — are kept
+//!    deliberately: opaque uuids, content-free, and what keeps grit's merge
+//!    laws exact.
+//! 2. **The pages the purge frees are zeroed** (`secure_delete` scoped to
+//!    that transaction, then a WAL checkpoint). Two limits grit states and
+//!    nacre cannot improve on: a checkpoint that finds a reader busy defers
+//!    the write-back to the next one, and FTS5 records a deletion by
+//!    writing a *new* segment that re-encodes the deleted terms — the index
+//!    stops matching immediately, but those bytes live until the segments
+//!    merge. `Grit::compact()` resolves both; it is maintenance, O(file
+//!    size), and neither nacre nor grit ever calls it for you.
+//! 3. **Out of scope, and it stays out of scope**: OS and platform backups
+//!    or snapshots, copies taken before the delete, blocks retained beneath
+//!    the filesystem, and devices that never receive the `Purge` op — one
+//!    that *does* receive it erases on arrival. An application promising a
+//!    person erasure still owns those; what it no longer has to own is the
+//!    live file.
+//!
+//! Bounded, on top of all three, by what was listed: these two functions
+//! decide the ids, and an id neither of them enumerates keeps its row and
+//! its entry. Each documents its own boundary below.
 //!
 //! **A forgotten id is spent.** Purge also tombstones every id it names,
 //! permanently, and grit gates its inserts on that tombstone table: a later
@@ -169,7 +194,8 @@ pub struct DeleteGroupOutcome {
 /// [`PipelineError::Storage`] for a grit failure, in which case nothing was
 /// erased.
 ///
-/// The oplog keeps the purged content by design — see the module docs.
+/// What is erased is erased from the live file, op-log entries included,
+/// within the limits the module docs state.
 // ports: graphiti_core/graphiti.py::remove_episode
 pub fn delete_episode(
     grit: &Grit,
@@ -263,7 +289,13 @@ pub fn delete_episode(
 ///    it. It stays until its row arrives (whereupon the id becomes
 ///    enumerable) — a sync-era limitation, recorded rather than worked
 ///    around.
-/// 4. **The oplog retains what was purged** — see the module docs.
+/// 4. **The op-log forgets with the rows, to exactly this boundary.** The
+///    entries that created the enumerated ids are scrubbed in the purge's
+///    own transaction, so nothing this call erases survives in
+///    `oplog_since` or an export — but an id it never enumerated keeps its
+///    entry along with its row. The edge that escapes by edge 1 escapes in
+///    the log too, fact sentence and all. See the module docs for the
+///    tiers and their limits.
 ///
 /// # Errors
 ///
