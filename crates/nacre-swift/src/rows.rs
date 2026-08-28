@@ -99,6 +99,10 @@ pub struct EpisodeRow {
     pub group_id: String,
     /// Belief time the row was written.
     pub created_at: String,
+    /// Whatever the host stored on this episode at ingestion, verbatim —
+    /// nacre never reads it. `nil` when nothing was stored (a different
+    /// fact from `""`), and for episodes written before grit's schema v6.
+    pub metadata: Option<String>,
 }
 
 /// A bounded neighborhood, as returned by [`crate::Memory::traverse`].
@@ -172,5 +176,6 @@ pub(crate) fn episode_row(e: &grit_core::Episode) -> EpisodeRow {
         occurred_at: iso(e.occurred_at),
         group_id: e.group_id.clone(),
         created_at: iso(e.created_at),
+        metadata: e.metadata.clone(),
     }
 }

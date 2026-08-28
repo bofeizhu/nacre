@@ -70,6 +70,65 @@ async binding cannot put a domain-specific code there. Match the prefix,
 never the prose after it. A malformed id rejects with `code`
 `"InvalidArg"` alongside the other argument errors.
 
+`EPISODE_NOT_FOUND_CODE` (`"EPISODE_NOT_FOUND"`) is the same mechanism for
+the mirror case: `deleteEpisode` on an id the graph does not hold,
+including a second delete of one already deleted. Nothing is written in
+that case, so a caller may treat it as "already gone" once it has decided
+that is what it means — the error exists so the decision is the caller's.
+
+## Forgetting
+
+```js
+const gone = memory.deleteEpisode(episodeId);   // one memory, and what it alone evidenced
+memory.deleteGroup(groupId);                    // a whole namespace
+```
+
+Both are synchronous (no model call is involved, only grit) and both are
+**writes**: each commits a single grit `Purge` in one transaction, so a
+deletion happens whole or not at all. `deleteEpisode` reports both halves
+— `purgedNodeIds` / `purgedEdgeIds` for what only this episode evidenced,
+`keptNodeIds` / `keptEdgeIds` for what other episodes evidence too, which
+is what a UI should show a person. `deleteGroup` reports what it swept and
+treats an unknown group as a group with no rows: zero counts, nothing
+written.
+
+"Forgotten" means **unreachable through every read API and every index** —
+rows, update and invalidation records, provenance in both directions, FTS
+mirrors and stored vectors. It does not mean *gone from the file*: grit's
+op-log deliberately keeps the original ops, because it is the sync unit.
+An app that promises a person erasure must make that promise on its own
+terms.
+
+A deleted id is also **spent**: grit tombstones it permanently, so a later
+`addEpisode` naming it resolves as success while storing neither the
+episode row nor its provenance — leaving that ingest's nodes and edges
+evidenced by nothing. Re-ingesting a deleted memory needs a NEW id.
+
+## Episode metadata
+
+`addEpisode` takes an optional `metadata` string, stored verbatim on the
+episode row and handed back by `episode(id)`, `episodesInGroup` and
+`previousEpisodes`. It is opaque to nacre in the strongest sense — never
+interpolated into a prompt, never embedded, never part of episode identity
+— so it is where a caller records which of *its own* rows a memory came
+from (an outbox row id, a document version, a consent tag) without a side
+table that can drift out of sync with the graph.
+
+```js
+const { episodeId } = await memory.addEpisode(
+  { content, sourceDescription, groupId, metadata }, llm, embedder);
+const stored = memory.episode(episodeId);   // null if the graph has no such row
+stored.metadata === metadata;
+```
+
+`episode(id)` is the point lookup behind a provenance id from
+`searchEdges` or `mentionsOf` — it answers a missing id with `null` rather
+than throwing, because a lookup that finds nothing has not failed.
+
+Metadata is **write-once**: grit has no episode update op, so changing it
+means `deleteEpisode` plus a fresh ingest under a *new* id (see the
+tombstone rule above).
+
 ## Providers
 
 `Memory.addEpisode` / `Memory.searchEdges` take `LlmConfig` / `EmbedderConfig`

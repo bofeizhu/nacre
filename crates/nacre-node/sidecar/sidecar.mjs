@@ -76,20 +76,28 @@ const handlers = {
     return { version: version(), dbPath: params.dbPath, groupId: defaultGroupId };
   },
 
-  // {content, sourceDescription, name?, source?, groupId?, validAt?}
-  //   → AddEpisodeResult {episodeId, nodeIds, newEdgeIds, merges, invalidatedEdgeIds}
+  // {content, sourceDescription, name?, source?, groupId?, validAt?, id?,
+  //  metadata?} → AddEpisodeResult {episodeId, nodeIds, newEdgeIds, merges,
+  //  invalidatedEdgeIds}
+  //
+  // `id` is the caller's idempotency key: pass the same one on every retry
+  // of an episode and a duplicate ingest is refused (EPISODE_EXISTS) rather
+  // than written twice. `metadata` is the caller's own payload, stored
+  // verbatim and never shown to a model.
   async addEpisode(params) {
     requireInit();
     if (!params?.content) throw new Error('addEpisode: missing content');
     if (!params?.sourceDescription) throw new Error('addEpisode: missing sourceDescription');
     return await memory.addEpisode(
       {
+        id: params.id,
         name: params.name ?? '',
         content: params.content,
         source: params.source,
         sourceDescription: params.sourceDescription,
         groupId: params.groupId ?? defaultGroupId,
         validAt: params.validAt,
+        metadata: params.metadata,
       },
       configs.llm,
       configs.embedder,
@@ -108,6 +116,38 @@ const handlers = {
       configs.embedder,
     );
     return { hits };
+  },
+
+  // {id} → {episode: EpisodeRow | null} — the point lookup behind a
+  // provenance id from searchEdges, and how a caller reads its own
+  // `metadata` back. An id the graph does not hold is `null`, not an error.
+  episode(params) {
+    requireInit();
+    if (!params?.id) throw new Error('episode: missing id');
+    return { episode: memory.episode(params.id) ?? null };
+  },
+
+  // {id} → DeleteEpisodeResult {episodeId, purgedNodeIds, purgedEdgeIds,
+  //   keptNodeIds, keptEdgeIds}
+  //
+  // Forgets one episode and the graph that exists only because of it.
+  // An unknown id (or a second delete) is an error whose message leads
+  // with EPISODE_NOT_FOUND; nothing is written in that case. The id is
+  // spent afterwards — re-ingesting the same memory needs a new one.
+  deleteEpisode(params) {
+    requireInit();
+    if (!params?.id) throw new Error('deleteEpisode: missing id');
+    return memory.deleteEpisode(params.id);
+  },
+
+  // {groupId?} → DeleteGroupResult {purgedNodeIds, purgedEdgeIds,
+  //   purgedEpisodeIds}
+  //
+  // Forgets a whole namespace (defaults to init's groupId). An unknown or
+  // empty group is not an error: zero counts, nothing written.
+  deleteGroup(params) {
+    requireInit();
+    return memory.deleteGroup(params?.groupId ?? defaultGroupId);
   },
 
   // {} → {version, groupId, episodes, liveNodes, edges} (uninitialized: {version})

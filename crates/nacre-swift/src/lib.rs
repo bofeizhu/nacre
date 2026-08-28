@@ -45,6 +45,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 
 use nacre_core::extract::{EpisodeInput, EpisodeSource};
+use nacre_core::forget::{delete_episode, delete_group};
 use nacre_core::model::{Embedder, LanguageModel, ModelError};
 use nacre_core::pipeline::{
     AddEpisodeOptions, PREVIOUS_EPISODE_WINDOW, PipelineError, add_episode,
@@ -108,8 +109,9 @@ pub enum NacreError {
     /// that already succeeded sees this, and only the host knows whether
     /// that is the expected second attempt or a bug in its bookkeeping.
     ///
-    /// Reachable once the deletion surface is bound (bindings phase); the
-    /// case exists now so the error taxonomy stays 1:1 with the core's.
+    /// Raised by [`Memory::delete_episode`] alone — the episode *getter*
+    /// answers a missing id with `nil`, because a lookup that finds
+    /// nothing is not a failure.
     #[error("episode {id} not found")]
     EpisodeNotFound {
         /// The id that is not stored — the one that was passed in.
@@ -205,6 +207,23 @@ pub struct Episode {
     /// injected clock for this ingestion; defaults to the current system
     /// time.
     pub valid_at: Option<String>,
+    /// Application payload stored verbatim on the episode row and handed
+    /// back by every episode read path ([`Memory::episode`],
+    /// [`Memory::episodes_in_group`], [`Memory::previous_episodes`]).
+    /// Opaque to nacre: never sent to a model, never embedded, never part
+    /// of episode identity — it is where a host records which of ITS OWN
+    /// records this memory came from.
+    ///
+    /// Write-once. grit has no episode update op, so changing it means
+    /// [`Memory::delete_episode`] plus a fresh ingest **under a new id**:
+    /// the delete tombstones the old id permanently, and re-ingesting
+    /// under it succeeds while storing neither the episode row nor its
+    /// provenance.
+    ///
+    /// Last in the record and defaulted, so no existing `Episode(...)`
+    /// call site has to change.
+    #[uniffi(default = None)]
+    pub metadata: Option<String>,
 }
 
 /// A `(from, into)` node merge the pipeline executed.
@@ -229,6 +248,40 @@ pub struct AddEpisodeResult {
     pub merges: Vec<MergePair>,
     /// Stored edges this ingestion invalidated.
     pub invalidated_edge_ids: Vec<String>,
+}
+
+/// What one [`Memory::delete_episode`] erased, and what it deliberately
+/// left.
+///
+/// The `kept_*` lists are the interesting half: entities and facts this
+/// episode evidenced that OTHER episodes evidence too, and which are
+/// therefore still true after it is forgotten. A UI showing a person what
+/// a deletion did should show both halves.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DeleteEpisodeResult {
+    /// The episode that was erased.
+    pub episode_id: String,
+    /// Nodes erased: mentioned by this episode and no other.
+    pub purged_node_ids: Vec<String>,
+    /// Edges erased: this episode was their earliest evidence.
+    pub purged_edge_ids: Vec<String>,
+    /// Nodes kept: other episodes mention them too.
+    pub kept_node_ids: Vec<String>,
+    /// Edges kept: an earlier episode is their evidence.
+    pub kept_edge_ids: Vec<String>,
+}
+
+/// What one [`Memory::delete_group`] erased. Empty everywhere when the
+/// group held nothing — an unknown group is not an error, it is a group
+/// with no rows.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DeleteGroupResult {
+    /// Node rows erased, id-ordered.
+    pub purged_node_ids: Vec<String>,
+    /// Edge rows erased, id-ordered.
+    pub purged_edge_ids: Vec<String>,
+    /// Episode rows erased, chronological.
+    pub purged_episode_ids: Vec<String>,
 }
 
 /// One search hit, in fused rank order.
@@ -286,6 +339,11 @@ fn parse_id(id: &str, field: &str) -> Result<uuid::Uuid, NacreError> {
     id.parse().map_err(|e| NacreError::InvalidInput {
         message: format!("{field} {id:?}: {e}"),
     })
+}
+
+/// Ids as the boundary carries them — UniFFI has no UUID type.
+fn ids(ids: &[uuid::Uuid]) -> Vec<String> {
+    ids.iter().map(|id| id.to_string()).collect()
 }
 
 fn episode_source(source: Option<&str>) -> Result<EpisodeSource, NacreError> {
@@ -388,10 +446,10 @@ impl Memory {
     // Read path. The calls below are the entire data contract the
     // memory-graph visualization needs: full dump (nodes_in_group /
     // edges_in_group / episodes_in_group), focus+context (traverse), and
-    // drill-down (node_history + mentions_of). They are SYNCHRONOUS —
-    // grit is an embedded library and these are single-digit-millisecond
-    // SQLite reads — but they do touch the disk, so call them off the
-    // main thread for large groups.
+    // drill-down (node_history + mentions_of + episode). They are
+    // SYNCHRONOUS — grit is an embedded library and these are
+    // single-digit-millisecond SQLite reads — but they do touch the disk,
+    // so call them off the main thread for large groups.
     // ------------------------------------------------------------------
 
     /// Every node in a group, id-ordered — full bi-temporal record
@@ -425,6 +483,23 @@ impl Memory {
             .iter()
             .map(episode_row)
             .collect())
+    }
+
+    /// One episode by id, or `nil` when the graph does not hold it — the
+    /// point lookup behind a provenance id from [`Memory::search_edges`]
+    /// or [`Memory::mentions_of`], and how a host reads its own
+    /// [`Episode::metadata`] back without scanning the group.
+    ///
+    /// Absence is `nil`, not a throw: a getter that answers "no such row"
+    /// has not failed, and a host that wants the id's absence to be an
+    /// error owns that decision. ([`Memory::delete_episode`] is the
+    /// opposite case — deleting nothing is worth reporting.)
+    pub fn episode(&self, id: String) -> Result<Option<EpisodeRow>, NacreError> {
+        Ok(self
+            .grit
+            .episode(parse_id(&id, "episode id")?)?
+            .as_ref()
+            .map(episode_row))
     }
 
     /// Bounded neighborhood around seed nodes. `as_of` filters by event
@@ -506,6 +581,63 @@ impl Memory {
         let start = episodes.len().saturating_sub(last_n);
         Ok(episodes[start..].iter().map(episode_row).collect())
     }
+
+    // ------------------------------------------------------------------
+    // Deletion. Synchronous like the read path — no model call is
+    // involved, only grit — but these are WRITES: each commits one
+    // `Purge` in a single transaction, so a deletion happens whole or not
+    // at all. "Forgotten" means unreachable through every read API and
+    // every index; the op-log deliberately keeps the original ops (it is
+    // the sync unit), so a host that promises a person erasure must make
+    // that promise on its own terms (a compacted export, a rekeyed file).
+    // ------------------------------------------------------------------
+
+    /// Forget one episode, and the graph that exists only because of it:
+    /// nodes this episode is the sole evidence for and facts it created
+    /// go; anything another episode also evidences stays. Both halves come
+    /// back in the result.
+    ///
+    /// # Errors
+    ///
+    /// [`NacreError::EpisodeNotFound`] when the id is not stored,
+    /// including a second delete of an episode already deleted — nothing
+    /// is written in that case, so a host may treat it as "already gone"
+    /// once it has decided that is what it means.
+    ///
+    /// # The id is spent
+    ///
+    /// grit tombstones a purged id permanently, so a later ingest naming
+    /// it stores neither the episode row nor its provenance while the
+    /// nodes and edges beside it land — `Ok`, over a graph whose new rows
+    /// no episode evidences. Re-ingesting a deleted memory (the one way
+    /// to change write-once [`Episode::metadata`]) needs a NEW id.
+    pub fn delete_episode(&self, id: String) -> Result<DeleteEpisodeResult, NacreError> {
+        let outcome = delete_episode(&self.grit, parse_id(&id, "episode id")?)?;
+        Ok(DeleteEpisodeResult {
+            episode_id: outcome.episode_id.to_string(),
+            purged_node_ids: ids(&outcome.purged_node_ids),
+            purged_edge_ids: ids(&outcome.purged_edge_ids),
+            kept_node_ids: ids(&outcome.kept_node_ids),
+            kept_edge_ids: ids(&outcome.kept_edge_ids),
+        })
+    }
+
+    /// Forget a whole namespace: every node, edge and episode row tagged
+    /// with `group_id`, erased in one `Purge`. This enumerates rows, not
+    /// evidence — the full bi-temporal record, expired and merged-away
+    /// rows included.
+    ///
+    /// An unknown or empty group is **not** an error: it is a group with
+    /// no rows, and the answer is a zero-count result with nothing
+    /// written.
+    pub fn delete_group(&self, group_id: String) -> Result<DeleteGroupResult, NacreError> {
+        let outcome = delete_group(&self.grit, &group_id)?;
+        Ok(DeleteGroupResult {
+            purged_node_ids: ids(&outcome.purged_node_ids),
+            purged_edge_ids: ids(&outcome.purged_edge_ids),
+            purged_episode_ids: ids(&outcome.purged_episode_ids),
+        })
+    }
 }
 
 impl Memory {
@@ -542,9 +674,7 @@ impl Memory {
                 .valid_at
                 .clone()
                 .or_else(|| Some(now.to_rfc3339_opts(chrono::SecondsFormat::Secs, false))),
-            // `EpisodeInput.metadata` is not on the Swift record yet — it
-            // lands with the deletion surface in the bindings phase.
-            metadata: None,
+            metadata: episode.metadata,
         };
         let previous = retrieve_previous_episodes(
             &self.grit,

@@ -108,10 +108,11 @@ swift build && swift test     # from the repo root
 
 The package exports `Memory`: open a memory file, `addEpisode`, hybrid
 `searchEdges`, the full synchronous read path (`nodesInGroup`,
-`edgesInGroup`, `episodesInGroup`, `traverse`, `nodeHistory`,
-`mentionsOf`, `previousEpisodes`), and the replay twins that drive those
-same paths from recorded responses — offline, with no protocols to
-implement.
+`edgesInGroup`, `episodesInGroup`, `episode`, `traverse`, `nodeHistory`,
+`mentionsOf`, `previousEpisodes`), the two ways to forget
+(`deleteEpisode`, `deleteGroup`), and the replay twins that drive the
+ingest and search paths from recorded responses — offline, with no
+protocols to implement.
 
 The build script is a prerequisite, not a convenience: it writes
 `target/swift/nacre.xcframework` and `swift/Sources/NacreFFI/`, both

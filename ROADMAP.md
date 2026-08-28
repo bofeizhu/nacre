@@ -939,19 +939,36 @@ oracle — see the test note below); undo.
       `PipelineError::EpisodeNotFound` mirrors `EpisodeExists`.
       Gates: `tests/deletion.rs` green, DEVIATIONS.md entry for the
       `episodes[0]` derivation, clippy/doc clean.
-- [ ] Bindings (Phase 3, not started): `deleteGroup`/`deleteEpisode` and
-      the `metadata` field on both binding surfaces —
+- [x] Bindings (Phase 3): `deleteGroup`/`deleteEpisode` and the
+      `metadata` field on both binding surfaces —
       `EpisodeJs`/`EpisodeRow` + `index.d.ts` regen for Node,
       `Episode`/`EpisodeRow` + `scripts/build-swift.sh` regen for Swift —
-      plus the episode-by-id getter neither binding has today (an app
-      holding a provenance id from `searchEdges` or `mentionsOf` currently
-      has to scan the group to read its own metadata back). Node needs an
+      plus the episode-by-id getter neither binding had (an app holding a
+      provenance id from `searchEdges` or `mentionsOf` had to scan the
+      group to read its own metadata back). Node needs an
       `EPISODE_NOT_FOUND_CODE` message prefix, the same napi limitation as
-      M9; Swift's `NacreError::EpisodeNotFound` case already exists. Fold
+      M9; Swift's `NacreError::EpisodeNotFound` case already existed. Fold
       in the M9 carry-over while there: the sidecar
-      (`crates/nacre-node/sidecar/sidecar.mjs`) forwards neither `id` nor
+      (`crates/nacre-node/sidecar/sidecar.mjs`) forwarded neither `id` nor
       `metadata`.
       Gates: Node tests, XCTest, both against the local grit patch.
+      → done 2026-08-28. 113 cargo tests (nacre-swift's `tests/replay.rs`
+      gains the deletion/metadata round-trip, which needs no Swift
+      toolchain), Node 6/6, XCTest 10/10, clippy/fmt/doc clean, and
+      `scripts/build-swift.sh` regenerated the XCFramework + bindings
+      (still gitignored — the release-manifest `git add -f` is a tag-only
+      step). Decisions: **deletion is synchronous on both surfaces**, like
+      the rest of the grit-only path — it makes no model call, and an
+      async twin would have been the first async binding with nothing to
+      await; the **getter answers a missing id with `null`/`nil`** rather
+      than `EPISODE_NOT_FOUND`, so the code stays the one thing it means
+      (a delete that erased nothing); `Episode.metadata` went **last**
+      with `#[uniffi(default = None)]`, so not one `Episode(...)` call
+      site changed. The sidecar took `episode`/`deleteEpisode`/
+      `deleteGroup` but NOT the viz read path: its scope is what a
+      supervising non-Node parent drives, and `episode` is there only
+      because `searchEdges` hands back provenance ids that would
+      otherwise be unreadable over the protocol.
 - [ ] BLOCKED(needs the grit release): grit ships schema v6 (episode
       metadata + `episode_targets`), then nacre bumps its `grit-core`
       requirement, DROPS the `[patch.crates-io]` override, re-gates

@@ -70,6 +70,11 @@ pub struct EpisodeRow {
     pub occurred_at: String,
     pub group_id: String,
     pub created_at: String,
+    /// Whatever the application stored on this episode at ingestion,
+    /// verbatim — nacre never reads it. `null` when nothing was stored
+    /// (a different fact from `""`), and for episodes written before
+    /// grit's schema v6.
+    pub metadata: Option<String>,
 }
 
 /// A bounded neighborhood, as returned by `traverse`.
@@ -140,5 +145,6 @@ pub fn episode_row(e: &grit_core::Episode) -> EpisodeRow {
         occurred_at: iso(e.occurred_at),
         group_id: e.group_id.clone(),
         created_at: iso(e.created_at),
+        metadata: e.metadata.clone(),
     }
 }

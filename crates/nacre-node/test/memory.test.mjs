@@ -14,8 +14,11 @@ const root = path.join(here, '..');
 
 let Memory;
 let EPISODE_EXISTS_CODE;
+let EPISODE_NOT_FOUND_CODE;
 try {
-  ({ Memory, EPISODE_EXISTS_CODE } = await import(path.join(root, 'index.js')));
+  ({ Memory, EPISODE_EXISTS_CODE, EPISODE_NOT_FOUND_CODE } = await import(
+    path.join(root, 'index.js')
+  ));
 } catch {
   console.warn('SKIP: nacre-node addon not built — run `npm run build` first');
 }
@@ -33,15 +36,16 @@ const replayEmb = {
   recordingsPath: path.join(fixtures, 'embedder_recordings.json'),
 };
 
-function ingest(m, ep, id) {
+function ingest(m, ep, { id, groupId, metadata } = {}) {
   return m.addEpisode(
     {
       id,
       name: ep.name,
       content: ep.content,
       sourceDescription: ep.source_description,
-      groupId: spec.group_id,
+      groupId: groupId ?? spec.group_id,
       validAt: ep.reference_time,
+      metadata,
     },
     replayLlm,
     replayEmb,
@@ -119,7 +123,7 @@ test('a caller-supplied id makes ingestion idempotent', { skip: !Memory }, async
   // A caller that retries failed ingests owns the id — the same one on
   // every attempt for the same episode.
   const id = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
-  const first = await ingest(m, spec.episodes[0], id);
+  const first = await ingest(m, spec.episodes[0], { id });
   assert.equal(first.episodeId, id, 'the supplied id IS the stored episode id');
   const nodes = m.nodesInGroup(spec.group_id).length;
 
@@ -128,7 +132,7 @@ test('a caller-supplied id makes ingestion idempotent', { skip: !Memory }, async
   // graph mutations it evidences, so its presence means the whole ingest
   // is already there.
   await assert.rejects(
-    () => ingest(m, spec.episodes[0], id),
+    () => ingest(m, spec.episodes[0], { id }),
     (err) => {
       assert.equal(
         err.message.split(': ')[0],
@@ -144,13 +148,117 @@ test('a caller-supplied id makes ingestion idempotent', { skip: !Memory }, async
 
   // A malformed key is a caller bug, caught with the argument errors.
   await assert.rejects(
-    () => ingest(m, spec.episodes[0], 'not-a-uuid'),
+    () => ingest(m, spec.episodes[0], { id: 'not-a-uuid' }),
     (err) => {
       assert.equal(err.code, 'InvalidArg');
       assert.match(err.message, /^id "not-a-uuid":/);
       return true;
     },
   );
+
+  fs.unlinkSync(dbPath);
+});
+
+test('forgetting and episode metadata through the FFI (replay, offline)', { skip: !Memory }, async () => {
+  // Its own file, like every other test here.
+  const dbPath = path.join(os.tmpdir(), `nacre-node-forget-${process.pid}.db`);
+  try { fs.unlinkSync(dbPath); } catch {}
+  const m = Memory.open(dbPath, 'node-test');
+  const sibling = `${spec.group_id}-sibling`;
+
+  // The same trace into two groups of one database. The replay key carries
+  // no group id while every candidate pool the pipeline consults IS
+  // group-scoped, so the second ingest issues byte-identical requests and
+  // builds a structurally identical, id-disjoint sibling — the control that
+  // deleting one group must leave untouched.
+  const provenance = JSON.stringify({ outboxRow: 42, consent: 'granted' });
+  const first = await ingest(m, spec.episodes[0], { metadata: provenance });
+  const second = await ingest(m, spec.episodes[1]);
+  for (const ep of spec.episodes) await ingest(m, ep, { groupId: sibling });
+
+  // --- metadata: stored verbatim, handed back by every episode read path,
+  // and never sent to a model (a leak into a prompt would change the
+  // replay key and fail this ingest as a miss, not as an assertion). ---
+  const stored = m.episode(first.episodeId);
+  assert.equal(stored.metadata, provenance, 'metadata round-trips through the getter');
+  assert.equal(stored.id, first.episodeId);
+  const scanned = m.episodesInGroup(spec.group_id).find((e) => e.id === first.episodeId);
+  assert.equal(scanned.metadata, provenance, 'and through the group scan');
+  const windowed = m.previousEpisodes(spec.group_id).find((e) => e.id === first.episodeId);
+  assert.equal(windowed.metadata, provenance, 'and through the previous-episode window');
+  assert.ok(!m.episode(second.episodeId).metadata, 'an episode that stored nothing has none');
+
+  // The getter answers "no such row" with null; only a malformed id is an
+  // argument error.
+  assert.equal(m.episode('018f0000-0000-7000-8000-000000000000'), null, 'unknown id → null');
+  assert.throws(() => m.episode('not-a-uuid'), { code: 'InvalidArg' });
+
+  // --- deleteEpisode: sole evidence goes, corroborated evidence stays ---
+  const siblingBefore = {
+    nodes: m.nodesInGroup(sibling).length,
+    edges: m.edgesInGroup(sibling).length,
+    episodes: m.episodesInGroup(sibling).length,
+  };
+  const gone = m.deleteEpisode(second.episodeId);
+  assert.equal(gone.episodeId, second.episodeId);
+  assert.ok(gone.purgedNodeIds.length + gone.purgedEdgeIds.length > 0, 'ep-1 left residue');
+  assert.ok(gone.keptNodeIds.length > 0, 'ep-0 corroborates entities ep-1 also mentioned');
+  assert.equal(m.episode(second.episodeId), null, 'the episode row is unreachable');
+  const liveIds = new Set(m.nodesInGroup(spec.group_id).map((n) => n.id));
+  for (const id of gone.purgedNodeIds) assert.ok(!liveIds.has(id), `${id} is gone`);
+  for (const id of gone.keptNodeIds) assert.ok(liveIds.has(id), `${id} survived`);
+
+  // A second delete is refused with the stable prefix, and writes nothing.
+  assert.throws(
+    () => m.deleteEpisode(second.episodeId),
+    (err) => {
+      assert.equal(
+        err.message.split(': ')[0],
+        EPISODE_NOT_FOUND_CODE,
+        `the rejection leads with the stable code: ${err.message}`,
+      );
+      assert.ok(err.message.includes(second.episodeId), err.message);
+      return true;
+    },
+  );
+  assert.throws(() => m.deleteEpisode('not-a-uuid'), { code: 'InvalidArg' });
+
+  // --- deleteGroup: one namespace, whole; the sibling untouched ---
+  const wiped = m.deleteGroup(spec.group_id);
+  assert.ok(wiped.purgedEpisodeIds.includes(first.episodeId));
+  assert.equal(m.nodesInGroup(spec.group_id).length, 0, 'no node rows left');
+  assert.equal(m.edgesInGroup(spec.group_id).length, 0, 'no edge rows left');
+  assert.equal(m.episodesInGroup(spec.group_id).length, 0, 'no episode rows left');
+  assert.equal(m.episode(first.episodeId), null, 'metadata went with its episode');
+  assert.deepEqual(
+    {
+      nodes: m.nodesInGroup(sibling).length,
+      edges: m.edgesInGroup(sibling).length,
+      episodes: m.episodesInGroup(sibling).length,
+    },
+    siblingBefore,
+    'the sibling group is untouched by either deletion',
+  );
+
+  // The FTS mirrors and vector tables are SHARED across groups — a delete
+  // that was not group-scoped would show up here, as the sibling losing
+  // recall or the wiped group keeping it.
+  assert.deepEqual(
+    await m.searchEdges(spec.queries[0], spec.group_id, 3, replayEmb),
+    [],
+    'a forgotten group is unreachable through search',
+  );
+  assert.ok(
+    (await m.searchEdges(spec.queries[0], sibling, 3, replayEmb)).length >= 1,
+    'while the sibling still recalls the same fact',
+  );
+
+  // An unknown group is a group with no rows, not an error.
+  assert.deepEqual(m.deleteGroup('never-existed'), {
+    purgedNodeIds: [],
+    purgedEdgeIds: [],
+    purgedEpisodeIds: [],
+  });
 
   fs.unlinkSync(dbPath);
 });

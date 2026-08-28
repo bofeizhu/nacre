@@ -147,12 +147,31 @@ for Swift:
 | `searchEdges(query:groupId:limit:embedder:embedderSpec:)` | hybrid recall with provenance |
 | `addEpisodeReplay(…)` / `searchEdgesReplay(…)` | the same paths against recorded responses — offline tests, no protocols needed |
 | `nodesInGroup` / `edgesInGroup` / `episodesInGroup` / `traverse` / `nodeHistory` / `mentionsOf` / `previousEpisodes` | the read path — the entire data contract a memory-graph view needs |
+| `episode(id:)` | one episode by id, or `nil` — the point lookup behind a provenance id, and how a host reads its own `Episode.metadata` back |
+| `deleteEpisode(id:)` | forget one episode and what it alone evidenced; returns both halves (`purged*` / `kept*`). `NacreError.EpisodeNotFound` when the id is not stored |
+| `deleteGroup(groupId:)` | forget a whole namespace; an unknown group is a zero-count result, not an error |
 | `version()` | crate version (load smoke-check) |
 
 The read path is **synchronous** (grit is an embedded library and these
 are millisecond SQLite reads) — call it off the main thread for large
 groups. Node/edge `attrsJson` is a JSON object *string*: UniFFI has no
 dynamic-value type, so hosts decode it themselves.
+
+Deletion is synchronous for the same reason — no model call is involved —
+but both calls are **writes**, each committing a single grit `Purge` in
+one transaction, so a deletion happens whole or not at all. Two rules the
+type system cannot state:
+
+- **"Forgotten" means unreachable through every read API and every index**
+  (rows, update and invalidation records, provenance both ways, FTS
+  mirrors, stored vectors) — *not* gone from the file. grit's op-log keeps
+  the original ops by design: it is the sync unit. An app that promises a
+  person erasure must make that promise on its own terms.
+- **A deleted id is spent.** grit tombstones it permanently, so a later
+  ingest naming it succeeds while storing neither the episode row nor its
+  provenance, leaving that ingest's nodes and edges evidenced by nothing.
+  Re-ingesting a forgotten memory — the one way to change write-once
+  `Episode.metadata` — needs a NEW id.
 
 ## Tests
 
@@ -168,6 +187,11 @@ and replay refuses to guess.
 - `tests/replay.rs` — the committed golden trace (`oracle/fixtures/trace1`)
   replayed through the bindings: exact ingestion deltas, the whole read
   path, search with provenance, and the fail-loudly replay-miss surface.
+  Plus the M10 surface: `metadata` on every episode read path (a leak into
+  a prompt would change the replay key and fail the ingest as a miss, so
+  the ingest is the assertion), both deletions with a second group of the
+  same database as the control, the getter's `nil`, and
+  `NacreError.EpisodeNotFound` on a second delete.
 
 `swift test` (repo root, after `scripts/build-swift.sh`) runs the same two
 shapes through the real bindings, which is what proves the *packaging*:
@@ -179,8 +203,11 @@ shapes through the real bindings, which is what proves the *packaging*:
   mode.
 - `swift/Tests/NacreKitTests/ReplayTests.swift` — trace 1 replayed from
   Swift, asserting the same ep-0 deltas the Rust and Node suites assert,
-  plus the idempotency key: a second ingest under a stored id is refused
-  as `NacreError.EpisodeExists` and writes nothing.
+  plus the idempotency key (a second ingest under a stored id is refused
+  as `NacreError.EpisodeExists` and writes nothing) and the forgetting
+  surface (metadata round-trip, `deleteEpisode`'s two halves,
+  `NacreError.EpisodeNotFound` on the second delete, `deleteGroup` leaving
+  a sibling group untouched).
 
 The Swift tests resolve the fixtures from `#filePath`, so they work from
 any checkout, and they `XCTSkip` **loudly** when the build artifacts or

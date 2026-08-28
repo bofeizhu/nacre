@@ -47,7 +47,7 @@
 /// )
 /// ```
 ///
-/// Five rules the compiler cannot enforce:
+/// Six rules the compiler cannot enforce:
 ///
 /// - **Ingest sequentially per group.** ``Memory`` is safe to share across
 ///   threads and grit serializes storage writes, but `addEpisode` reads the
@@ -76,10 +76,22 @@
 ///   ``NacreError/EpisodeExists(id:)``, which means the earlier attempt
 ///   landed in full — mark it done instead of ingesting it again. Omit the
 ///   id and a retry writes the episode twice.
+/// - **A forgotten id is spent, and forgetting is not erasure.**
+///   ``Memory/deleteEpisode(id:)`` and ``Memory/deleteGroup(groupId:)``
+///   each commit one transaction, and what they promise is *unreachable
+///   through every read API and every index* — grit's op-log keeps the
+///   original ops, because it is the sync unit, so an app that promises a
+///   person erasure must make that promise on its own terms. The ids they
+///   name are tombstoned permanently: a later ingest under a deleted
+///   episode id succeeds while storing neither the episode row nor its
+///   provenance, leaving that ingest's nodes and edges evidenced by
+///   nothing. Re-ingesting a forgotten memory — the one way to change
+///   write-once ``Episode/metadata`` — needs a NEW id.
 /// - **Call the read path off the main thread.** `nodesInGroup`,
-///   `edgesInGroup`, `episodesInGroup`, `traverse`, `nodeHistory`,
-///   `mentionsOf` and `previousEpisodes` are synchronous — they are
-///   millisecond SQLite reads, but they are disk reads.
+///   `edgesInGroup`, `episodesInGroup`, `episode`, `traverse`,
+///   `nodeHistory`, `mentionsOf` and `previousEpisodes` are synchronous —
+///   they are millisecond SQLite reads, but they are disk reads. So are
+///   the two deletions, which are writes.
 ///
 /// Provider failures come back as ``NacreError/Provider(message:)``, after
 /// nacre's own retries; a thrown Swift error that is not a `NacreError` is

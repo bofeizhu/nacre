@@ -17,6 +17,7 @@ use rows::{
 };
 
 use nacre_core::extract::{EpisodeInput, EpisodeSource};
+use nacre_core::forget::{delete_episode, delete_group};
 use nacre_core::pipeline::{
     AddEpisodeOptions, PREVIOUS_EPISODE_WINDOW, PipelineError, add_episode,
     retrieve_previous_episodes,
@@ -40,6 +41,17 @@ pub fn version() -> String {
 #[napi]
 pub const EPISODE_EXISTS_CODE: &str = "EPISODE_EXISTS";
 
+/// Marks the one `deleteEpisode` rejection a caller is expected to branch
+/// on: the episode id it named is not stored, so nothing was deleted —
+/// including a second delete of an episode already deleted. Rejected
+/// errors start their message with this token followed by `": "` — match
+/// on it, never on the prose after it.
+///
+/// Same mechanism, and the same napi limitation, as
+/// [`EPISODE_EXISTS_CODE`].
+#[napi]
+pub const EPISODE_NOT_FOUND_CODE: &str = "EPISODE_NOT_FOUND";
+
 /// One episode to ingest.
 #[napi(object)]
 pub struct EpisodeJs {
@@ -62,6 +74,18 @@ pub struct EpisodeJs {
     /// ISO-8601 event time. Also the pipeline's injected clock for this
     /// ingestion; defaults to the current system time.
     pub valid_at: Option<String>,
+    /// Application payload stored verbatim on the episode row and handed
+    /// back by every episode read path (`episode`, `episodesInGroup`,
+    /// `previousEpisodes`). Opaque to nacre: never sent to a model, never
+    /// embedded, never part of episode identity — it is where a caller
+    /// records which of ITS OWN rows this memory came from.
+    ///
+    /// Write-once. grit has no episode update op, so changing it means
+    /// `deleteEpisode` plus a fresh ingest **under a new id**: deletion
+    /// tombstones the old id permanently, and re-ingesting under it
+    /// resolves as success while storing neither the episode row nor its
+    /// provenance.
+    pub metadata: Option<String>,
 }
 
 /// What one ingestion changed — the UI animation feed.
@@ -79,27 +103,62 @@ pub struct AddEpisodeResultJs {
     pub invalidated_edge_ids: Vec<String>,
 }
 
+/// What one `deleteEpisode` erased, and what it deliberately left.
+///
+/// The `kept*` lists are the interesting half: entities and facts this
+/// episode evidenced that OTHER episodes evidence too, and which are
+/// therefore still true after it is forgotten. A UI showing a user what a
+/// deletion did should show both halves.
+#[napi(object)]
+pub struct DeleteEpisodeResultJs {
+    /// The episode that was erased.
+    pub episode_id: String,
+    /// Nodes erased: mentioned by this episode and no other.
+    pub purged_node_ids: Vec<String>,
+    /// Edges erased: this episode was their earliest evidence.
+    pub purged_edge_ids: Vec<String>,
+    /// Nodes kept: other episodes mention them too.
+    pub kept_node_ids: Vec<String>,
+    /// Edges kept: an earlier episode is their evidence.
+    pub kept_edge_ids: Vec<String>,
+}
+
+/// What one `deleteGroup` erased. Empty everywhere when the group held
+/// nothing — an unknown group is not an error, it is a group with no rows.
+#[napi(object)]
+pub struct DeleteGroupResultJs {
+    /// Node rows erased, id-ordered.
+    pub purged_node_ids: Vec<String>,
+    /// Edge rows erased, id-ordered.
+    pub purged_edge_ids: Vec<String>,
+    /// Episode rows erased, chronological.
+    pub purged_episode_ids: Vec<String>,
+}
+
+fn ids(ids: &[uuid::Uuid]) -> Vec<String> {
+    ids.iter().map(|id| id.to_string()).collect()
+}
+
 fn generic(e: impl std::fmt::Display) -> Error {
     Error::new(Status::GenericFailure, e.to_string())
 }
 
 /// Pipeline failures, as JS sees them. Model and storage failures render
-/// exactly as before — a `GenericFailure` carrying the cause. The
-/// idempotency rejection is the one a caller branches on, so its message
-/// leads with [`EPISODE_EXISTS_CODE`] (see that constant for why the code
-/// is not in `error.code`).
+/// as a `GenericFailure` carrying the cause. The two episode-identity
+/// rejections are the ones a caller branches on, so their messages lead
+/// with [`EPISODE_EXISTS_CODE`] / [`EPISODE_NOT_FOUND_CODE`] (see those
+/// constants for why the code is not in `error.code`).
 fn pipeline_error(e: PipelineError) -> Error {
     match e {
         PipelineError::EpisodeExists(id) => Error::new(
             Status::GenericFailure,
             format!("{EPISODE_EXISTS_CODE}: episode {id} already exists"),
         ),
-        // The deletion surface is not bound here yet, so no JS caller can
-        // produce this one; it renders like any other failure until the
-        // bindings phase gives it a code of its own.
-        e @ (PipelineError::Model(_)
-        | PipelineError::Storage(_)
-        | PipelineError::EpisodeNotFound(_)) => generic(e),
+        PipelineError::EpisodeNotFound(id) => Error::new(
+            Status::GenericFailure,
+            format!("{EPISODE_NOT_FOUND_CODE}: episode {id} not found"),
+        ),
+        e @ (PipelineError::Model(_) | PipelineError::Storage(_)) => generic(e),
     }
 }
 
@@ -173,9 +232,7 @@ impl Memory {
                 .valid_at
                 .clone()
                 .or_else(|| Some(now.to_rfc3339_opts(chrono::SecondsFormat::Secs, false))),
-            // `EpisodeInput.metadata` is not on `EpisodeJs` yet — it lands
-            // with the deletion surface in the bindings phase.
-            metadata: None,
+            metadata: episode.metadata,
         };
         let model = build_model(llm)?;
         let embedder = build_embedder(embedder)?;
@@ -220,10 +277,10 @@ impl Memory {
     }
 
     // ------------------------------------------------------------------
-    // Read path. The five calls below are the entire data contract the
+    // Read path. The calls below are the entire data contract the
     // memory-graph visualization needs: full dump (nodesInGroup /
     // edgesInGroup / episodesInGroup), focus+context (traverse), and
-    // drill-down (nodeHistory + mentionsOf).
+    // drill-down (nodeHistory + mentionsOf + episode).
     // ------------------------------------------------------------------
 
     /// Every node in a group, id-ordered — full bi-temporal record
@@ -262,6 +319,28 @@ impl Memory {
             .iter()
             .map(episode_row)
             .collect())
+    }
+
+    /// One episode by id, or `null` when the graph does not hold it —
+    /// the point lookup behind a provenance id from `searchEdges` or
+    /// `mentionsOf`, and the way a caller reads its own `metadata` back
+    /// without scanning the group.
+    ///
+    /// Absence is a `null`, not a rejection: a getter that answers "no
+    /// such row" is not a failure, and a caller that wants the id's
+    /// absence to be an error owns that decision. (`deleteEpisode` is the
+    /// opposite case — deleting nothing is worth reporting.)
+    #[napi]
+    pub fn episode(&self, id: String) -> Result<Option<EpisodeRow>> {
+        let id: uuid::Uuid = id
+            .parse()
+            .map_err(|e| Error::new(Status::InvalidArg, format!("episode id: {e}")))?;
+        Ok(self
+            .grit
+            .episode(id)
+            .map_err(generic)?
+            .as_ref()
+            .map(episode_row))
     }
 
     /// Bounded neighborhood around seed nodes. `asOf` filters by event
@@ -352,6 +431,62 @@ impl Memory {
         episodes.retain(|e| e.occurred_at <= reference.timestamp_millis());
         let start = episodes.len().saturating_sub(last_n);
         Ok(episodes[start..].iter().map(episode_row).collect())
+    }
+
+    // ------------------------------------------------------------------
+    // Deletion. Synchronous like the read path — no model call is
+    // involved, only grit — but these are WRITES: each commits one
+    // `Purge` in a single transaction, so a deletion happens whole or not
+    // at all. "Forgotten" means unreachable through every read API and
+    // every index; the op-log deliberately keeps the original ops (it is
+    // the sync unit), so an application that promises a person erasure
+    // must make that promise on its own terms.
+    // ------------------------------------------------------------------
+
+    /// Forget one episode, and the graph that exists only because of it:
+    /// nodes this episode is the sole evidence for and facts it created
+    /// go; anything another episode also evidences stays. Returns both
+    /// halves.
+    ///
+    /// Rejects with [`EPISODE_NOT_FOUND_CODE`] when the id is not stored,
+    /// including a second delete of an episode already deleted — nothing
+    /// is written in that case.
+    ///
+    /// The deleted id is **spent**: grit tombstones it permanently, so a
+    /// later ingest naming it stores neither the episode row nor its
+    /// provenance while the nodes and edges beside it land. Re-ingesting
+    /// after a delete needs a NEW id.
+    #[napi]
+    pub fn delete_episode(&self, id: String) -> Result<DeleteEpisodeResultJs> {
+        let id: uuid::Uuid = id
+            .parse()
+            .map_err(|e| Error::new(Status::InvalidArg, format!("episode id: {e}")))?;
+        let outcome = delete_episode(&self.grit, id).map_err(pipeline_error)?;
+        Ok(DeleteEpisodeResultJs {
+            episode_id: outcome.episode_id.to_string(),
+            purged_node_ids: ids(&outcome.purged_node_ids),
+            purged_edge_ids: ids(&outcome.purged_edge_ids),
+            kept_node_ids: ids(&outcome.kept_node_ids),
+            kept_edge_ids: ids(&outcome.kept_edge_ids),
+        })
+    }
+
+    /// Forget a whole namespace: every node, edge and episode row tagged
+    /// with `groupId`, erased in one `Purge`. This enumerates rows, not
+    /// evidence — the full bi-temporal record, expired and merged-away
+    /// rows included.
+    ///
+    /// An unknown or empty group is **not** an error: it is a group with
+    /// no rows, and the answer is a zero-count result with nothing
+    /// written.
+    #[napi]
+    pub fn delete_group(&self, group_id: String) -> Result<DeleteGroupResultJs> {
+        let outcome = delete_group(&self.grit, &group_id).map_err(pipeline_error)?;
+        Ok(DeleteGroupResultJs {
+            purged_node_ids: ids(&outcome.purged_node_ids),
+            purged_edge_ids: ids(&outcome.purged_edge_ids),
+            purged_episode_ids: ids(&outcome.purged_episode_ids),
+        })
     }
 }
 

@@ -152,6 +152,7 @@ fn episode(name: &str, content: &str, valid_at: &str) -> Episode {
         source_description: "chat".into(),
         group_id: "host-group".into(),
         valid_at: Some(valid_at.into()),
+        metadata: None,
     }
 }
 

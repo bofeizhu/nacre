@@ -43,6 +43,23 @@ Releases before 0.2.0 predate this file; their notes live in the git tags
   enumeration boundaries a group scan cannot cross, op-log retention) plus
   a golden trace replayed into two sibling groups of one database — the
   sibling is the control that deleting one group must leave byte-identical.
+- **Both binding surfaces carry the deletion surface and `metadata`.**
+  Node gains `deleteEpisode(id)` / `deleteGroup(groupId)` returning typed
+  outcome objects, `episode(id)` (the point lookup behind a provenance id;
+  `null` when the graph has no such row), `metadata` on the `addEpisode`
+  input and on every episode-bearing row, and the exported
+  `EPISODE_NOT_FOUND_CODE` message prefix — the same napi limitation, and
+  the same convention, as `EPISODE_EXISTS_CODE`. Swift gains
+  `deleteEpisode(id:)` / `deleteGroup(groupId:)` with `DeleteEpisodeResult`
+  / `DeleteGroupResult` records, `episode(id:) -> EpisodeRow?`, and
+  `Episode.metadata` as a defaulted trailing field, so no existing
+  `Episode(...)` call site changes; `NacreError.EpisodeNotFound` is now
+  reachable. Deletion is synchronous on both surfaces, like the rest of
+  the grit-only path — it makes no model call.
+- **The sidecar forwards `id` and `metadata`** through `addEpisode` (the
+  `id` gap carried over from 0.2.0) and gains `episode`, `deleteEpisode`
+  and `deleteGroup` methods; its two stable error prefixes reach the
+  protocol unchanged.
 
 ### Requires
 
@@ -51,9 +68,11 @@ Releases before 0.2.0 predate this file; their notes live in the git tags
 
 ### Not yet
 
-- The bindings do not expose deletion or `metadata` (both surfaces still
-  compile and behave exactly as in 0.2.0). That is the next phase, together
-  with the sidecar's missing `id` forwarding carried over from 0.2.0.
+- The viz read path is still absent from the sidecar protocol (`status`
+  aggregates; `episode` exists only because `searchEdges` hands back
+  provenance ids). The committed sample dumps under
+  `crates/nacre-node/examples/viz/` predate `metadata` and gain the key
+  whenever they are next regenerated.
 
 ## 0.2.0 — 2026-08-22
 

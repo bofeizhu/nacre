@@ -200,6 +200,90 @@ final class ReplayTests: XCTestCase {
         }
     }
 
+    func testForgettingAndEpisodeMetadataThroughThePackage() async throws {
+        let trace = try Artifacts.requireTrace1()
+        let group = try XCTUnwrap(trace["group_id"] as? String)
+        let sibling = "\(group)-sibling"
+        let memory = try Memory.open(
+            path: temporaryMemoryPath("forget", cleanUp: self), deviceId: "swift-replay-test")
+        func replay(_ episode: Episode) async throws -> AddEpisodeResult {
+            try await memory.addEpisodeReplay(
+                episode: episode,
+                llmRecordingsPath: Artifacts.recordings("llm_recordings.json"),
+                embedderRecordingsPath: Artifacts.recordings("embedder_recordings.json"),
+                embedderSpec: traceSpec()
+            )
+        }
+
+        // ep-0 carries a host payload. It must never reach a prompt — a leak
+        // would change the replay key and this ingest would fail as a miss,
+        // so the ingest itself is the assertion.
+        let provenance = #"{"outboxRow":42}"#
+        var keyed = try episode(from: trace, index: 0)
+        keyed.metadata = provenance
+        let first = try await replay(keyed)
+        let second = try await replay(try episode(from: trace, index: 1))
+        // The same trace under a second group id: byte-identical requests, an
+        // id-disjoint graph — the control for what a deletion must not touch.
+        var elsewhere = try episode(from: trace, index: 0)
+        elsewhere.groupId = sibling
+        _ = try await replay(elsewhere)
+
+        // --- metadata: stored verbatim, handed back on every read path ---
+        let stored = try XCTUnwrap(try memory.episode(id: first.episodeId), "the episode is stored")
+        XCTAssertEqual(stored.metadata, provenance, "metadata round-trips through the getter")
+        XCTAssertEqual(stored.id, first.episodeId)
+        let scanned = try memory.episodesInGroup(groupId: group)
+        XCTAssertEqual(scanned[0].metadata, provenance, "the group scan carries it too")
+        XCTAssertNil(
+            scanned[1].metadata, "an episode that stored nothing has none — not an empty string")
+
+        // A missing row is nil, not a throw; only a malformed id is an error.
+        XCTAssertNil(try memory.episode(id: "018f0000-0000-7000-8000-000000000000"))
+        XCTAssertThrowsError(try memory.episode(id: "not-a-uuid"))
+
+        // --- deleteEpisode: sole evidence goes, corroborated evidence stays ---
+        let siblingBefore = try memory.nodesInGroup(groupId: sibling).count
+        let gone = try memory.deleteEpisode(id: second.episodeId)
+        XCTAssertEqual(gone.episodeId, second.episodeId)
+        XCTAssertFalse(
+            gone.purgedNodeIds.isEmpty && gone.purgedEdgeIds.isEmpty, "ep-1 left residue of its own")
+        XCTAssertFalse(
+            gone.keptNodeIds.isEmpty, "and entities ep-0 also evidences, which survive it")
+        XCTAssertNil(try memory.episode(id: second.episodeId), "the episode row is unreachable")
+        let live = Set(try memory.nodesInGroup(groupId: group).map(\.id))
+        XCTAssertTrue(gone.purgedNodeIds.allSatisfy { !live.contains($0) })
+        XCTAssertTrue(gone.keptNodeIds.allSatisfy { live.contains($0) })
+
+        // The mirror of the idempotency rejection: its own error case, naming
+        // the id, with nothing written.
+        do {
+            _ = try memory.deleteEpisode(id: second.episodeId)
+            XCTFail("an episode already deleted is not deletable")
+        } catch let error as NacreError {
+            guard case .EpisodeNotFound(let missing) = error else {
+                return XCTFail("expected .EpisodeNotFound, got \(error)")
+            }
+            XCTAssertEqual(missing, second.episodeId, "the rejection names the id passed in")
+        }
+
+        // --- deleteGroup: one namespace, whole; the sibling untouched ---
+        let wiped = try memory.deleteGroup(groupId: group)
+        XCTAssertTrue(wiped.purgedEpisodeIds.contains(first.episodeId))
+        XCTAssertTrue(try memory.nodesInGroup(groupId: group).isEmpty)
+        XCTAssertTrue(try memory.edgesInGroup(groupId: group).isEmpty)
+        XCTAssertTrue(try memory.episodesInGroup(groupId: group).isEmpty)
+        XCTAssertEqual(
+            try memory.nodesInGroup(groupId: sibling).count, siblingBefore,
+            "neither deletion touched the sibling group")
+
+        // An unknown group is a group with no rows, not an error.
+        let nothing = try memory.deleteGroup(groupId: "never-existed")
+        XCTAssertTrue(
+            nothing.purgedNodeIds.isEmpty && nothing.purgedEdgeIds.isEmpty
+                && nothing.purgedEpisodeIds.isEmpty)
+    }
+
     func testTheBindingsLoadAndRejectInMemoryDatabases() throws {
         try Artifacts.requireBuildArtifacts()
         // Module-qualified: XCTestCase has a `version` of its own.
