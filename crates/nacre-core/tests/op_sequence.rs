@@ -141,6 +141,9 @@ fn trace_episode(spec: &Value) -> EpisodeInput {
         source_description: spec["source_description"].as_str().unwrap().into(),
         group_id: String::new(), // filled by caller from the trace spec
         valid_at: Some(spec["reference_time"].as_str().unwrap().into()),
+        // The traces carry no application payload. `None` serializes
+        // away in the op (grit skips it), so the pins stay byte-identical.
+        metadata: None,
     }
 }
 

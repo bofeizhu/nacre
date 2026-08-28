@@ -213,3 +213,116 @@ provenance links, its vectors and the oplog come out identical, and the
 retry ingests exactly once), and
 `pipeline.rs::tests::overlay_serves_pending_writes_within_one_episode`
 (the label-promotion path, which neither trace exercises).
+
+## Episode deletion: earliest evidence stands in for `episodes[0]`
+
+**What diverges:** Upstream's `remove_episode` deletes an edge when
+`edge.episodes[0] == episode.uuid`. Its episode attribution is an
+append-ordered array, so slot 0 names the episode that first stated the
+fact. grit's `mentions` is a SET (primary key `(episode_id, target_id)`)
+with no insertion order and no column that could carry one, so that index
+does not exist here. `forget::delete_episode` derives the same fact
+instead: an edge's creator is the earliest-recorded episode mentioning it —
+`Episode.created_at`, ties broken by id. The node rule needs no derivation:
+upstream counts the episodes mentioning a node and deletes at exactly one,
+which is `mentions_of(id) == [episode_id]`.
+
+Three consequences of grit's data model, all deliberate:
+
+- **`mentions_of` resolves merge aliases and unions across them**, while
+  `episode_targets` returns the raw ids the episode wrote. The asymmetry is
+  what makes the node count right — a canonical node inherits the mentions
+  of everything folded into it, so "would anything still evidence this
+  entity?" is answered over the surviving entity, not over one alias. Its
+  inverse is the one place the asymmetry bites: a target merged away AFTER
+  the mention was recorded is weighed and erased through its stub, leaving
+  the node that absorbed it standing with no evidence. Only a hand-written
+  or synced graph gets there — the pipeline attributes canonical ids and
+  merges only fresh drafts into stored nodes.
+- **Merged-away draft rows are not reachable from any episode.** The
+  pipeline attributes the CANONICAL id in `mentions`, and grit keeps the
+  absorbed draft as an expired audit row; nothing links that row to the
+  episode that drafted it, so no episode deletion erases it. Upstream never
+  persists such a row at all, so there is no upstream behavior to match.
+  `forget::delete_group` does sweep them — it enumerates rows, not
+  evidence.
+- **No incident-edge cascade.** Upstream's node deletion is `DETACH
+  DELETE`, which takes every relationship touching the node; grit's purge
+  deliberately does not cascade (a cascade would make the op
+  order-dependent against concurrent writes). The two agree on anything
+  this pipeline wrote, because an episode mentions the endpoints of every
+  edge it mentions: a node whose only evidence is this episode therefore
+  has no incident edge with other evidence, and both rules erase the same
+  set. The divergence is reachable only in a hand-written graph that breaks
+  that invariant, where an edge can be left with a purged endpoint —
+  filtered out of traversal and search, still present in the group scan.
+
+**Why acceptable:** `created_at` is stamped from the op's HLC wall time —
+the issuing device's clock — so for a graph built by sequential ingestion
+it IS the order upstream's array was appended in, and the two rules name
+the same episode. They can differ only where upstream's own array order is
+not creation order: an episode ingested out of order, or one arriving by
+sync from a device whose clock is skewed. Neither is expressible upstream
+(no idempotency key, no sync), so there is no upstream behavior being
+broken — and the id tie-break keeps the rule total and deterministic on
+every device.
+
+**Asserted by:**
+`tests/deletion.rs::delete_episode_erases_sole_evidence_and_keeps_the_corroborated`
+(all four cases — sole-mention node erased, corroborated node kept, created
+edge erased, re-stated edge kept — in one graph) and
+`::trace1_deletion_leaves_the_sibling_group_byte_identical` (the same rule
+over pipeline-written state, against a sibling group as control). The alias
+corner is pinned by
+`::a_target_merged_away_after_the_mention_is_erased_through_its_stub`.
+
+One thing the batch does not extend to: the *decision* is a sequence of
+reads outside it, and grit's reader never blocks behind its writer, so a
+concurrent ingest on the same handle can corroborate a node after
+`delete_episode` has weighed it and still lose it to the purge. grit exposes
+no transaction to Layer 2 by design, so the fix is the caller's — serialize
+deletes against ingests on the same group. Upstream holds no transaction at
+any point, so this is not a fidelity regression.
+
+## Episode metadata is a nacre extension
+
+**What diverges:** `EpisodeInput.metadata` has no upstream counterpart —
+Graphiti's `EpisodicNode` carries no application payload. Nacre forwards it
+verbatim into `GraphOp::AddEpisode` (grit schema v6) and hands it back on
+every episode read path, including the previous-episode window
+`retrieve_previous_episodes` rebuilds.
+
+It exists because Layer 3 needs to tie a memory back to whatever produced
+it — the outbox row, the document version, a consent tag — and the honest
+place for that is the episode itself. The alternative is a side table
+keyed by episode id, which drifts out of sync exactly when it matters
+(after a partial write, or after a deletion).
+
+**Why acceptable:** Trace-neutral by construction, in three senses.
+`None` is skipped by grit's op serialization, so an op that does not use it
+is byte-identical to a pre-v6 one — the golden traces set no metadata and
+their op-sequence fixtures regenerate unchanged. No prompt context builder
+reads it (all six cherry-pick `content`, `valid_at` and
+`source_description`), so it cannot reach a model, change a request, or
+invalidate a recording. And it plays no part in identity: the ingest
+idempotency check keys on the id alone.
+
+One consequence a caller must know: episode metadata is **write-once**.
+grit has no update op for episodes and `add_episode` refuses a second
+ingest under a stored id, so changing it means `forget::delete_episode`
+plus a fresh ingest **under a new id**. The delete tombstones the old id
+permanently, and grit gates its inserts on the tombstone table: re-ingesting
+under it passes the idempotency check (the row really is absent), runs every
+model call and commits, but stores neither the episode row nor its mentions
+while the nodes and edges beside them land — `Ok`, over a graph whose new
+rows no episode evidences. grit exposes no per-id tombstone read, so nacre
+cannot refuse the reuse; retiring the id is the caller's job.
+
+**Asserted by:**
+`pipeline.rs::tests::metadata_is_stored_read_back_and_never_reaches_a_prompt`
+(a sentinel on both the ingested episode and the previous-episode window,
+swept across every request the run issues, plus the round-trip through
+`Grit::episode` and the group scan) and `tests/op_sequence.rs` (both
+traces' pins regenerate byte-identical with the field present). The
+delete-and-re-ingest trap above is pinned by
+`tests/deletion.rs::re_adding_a_purged_id_is_a_silent_no_op`.

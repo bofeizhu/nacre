@@ -321,6 +321,7 @@ mod tests {
             source_description: "chat".into(),
             group_id: "g".into(),
             valid_at: Some("2026-07-01T00:00:00+00:00".into()),
+            metadata: None,
         }
     }
 

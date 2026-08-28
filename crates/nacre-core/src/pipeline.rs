@@ -71,6 +71,13 @@ pub enum PipelineError {
     /// expected (a retry landing after all) or a bug in its own bookkeeping.
     #[error("episode {0} already exists")]
     EpisodeExists(Uuid),
+    /// The episode asked for is not stored: nothing was deleted. The mirror
+    /// of [`PipelineError::EpisodeExists`], reported for the same reason —
+    /// a caller retrying a delete that already succeeded sees this, and only
+    /// the caller knows whether that is the expected second attempt or a bug
+    /// in its own bookkeeping.
+    #[error("episode {0} not found")]
+    EpisodeNotFound(Uuid),
 }
 
 /// Options for [`add_episode`].
@@ -314,7 +321,7 @@ pub fn retrieve_previous_episodes(
         .map(|e| EpisodeInput {
             // These rows describe episodes already stored, so their
             // identity is known (prompt context reads only content and
-            // timestamp).
+            // timestamp; `name` is not stored at all, hence empty).
             id: Some(e.id),
             name: String::new(),
             content: e.content.clone(),
@@ -323,6 +330,11 @@ pub fn retrieve_previous_episodes(
             group_id: group_id.to_owned(),
             valid_at: DateTime::<Utc>::from_timestamp_millis(e.occurred_at)
                 .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, false)),
+            // Carried verbatim: what grit stored is what a caller reading
+            // this window back gets. Safe to carry precisely because no
+            // context builder reads it — the exclusion is enforced at the
+            // prompt boundary, not by dropping the value here.
+            metadata: e.metadata.clone(),
         })
         .collect())
 }
@@ -893,6 +905,8 @@ pub async fn add_episode<M: LanguageModel, E: Embedder>(
             content: episode.content.clone(),
             occurred_at,
             group_id: episode.group_id.clone(),
+            // Verbatim, uninspected: grit stores it, no prompt sees it.
+            metadata: episode.metadata.clone(),
             mentions,
         },
     )?;
@@ -965,6 +979,7 @@ mod tests {
             source_description: "chat between friends".into(),
             group_id: "trace-test".into(),
             valid_at: Some(valid_at.into()),
+            metadata: None,
         }
     }
 
@@ -1242,6 +1257,7 @@ mod tests {
                 content: content.into(),
                 occurred_at: at,
                 group_id: "g".into(),
+                metadata: None,
                 mentions: vec![],
             })
             .unwrap();
@@ -1302,6 +1318,12 @@ mod tests {
                 matching.len()
             );
             matching[0]["messages"].to_string()
+        }
+
+        /// Every request the pipeline issued, whole and in order — for
+        /// assertions about what the model was *not* shown.
+        fn all_requests(&self) -> Vec<Value> {
+            self.seen.lock().expect("script log lock").clone()
         }
     }
 
@@ -1562,6 +1584,163 @@ mod tests {
         assert!(grit.get_node_embedding(canonical).unwrap().is_some());
         assert!(grit.get_node_embedding(northwind).unwrap().is_some());
         assert!(grit.get_edge_embedding(edge).unwrap().is_some());
+
+        drop(grit);
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+        }
+    }
+
+    /// `EpisodeInput.metadata` is stored, handed back by both episode read
+    /// paths, and shown to no model.
+    ///
+    /// The exclusion is the load-bearing half. Nothing in the pipeline reads
+    /// metadata, and every prompt context is built by cherry-picking episode
+    /// fields — so a leak would take a deliberate code change, and no
+    /// existing assertion would notice it: the golden traces carry no
+    /// metadata, and `prompt_fidelity` renders from fixed fixture contexts
+    /// that never see an `EpisodeInput`. Hence a sentinel swept across every
+    /// request the run issues, with metadata set on BOTH the ingested
+    /// episode and the previous-episode window that feeds the same prompts.
+    #[tokio::test]
+    async fn metadata_is_stored_read_back_and_never_reaches_a_prompt() {
+        const GROUP: &str = "metadata-test";
+        // High-entropy and unlike any prompt text, so a substring hit is a
+        // leak and never a coincidence.
+        const SENTINEL: &str = "NACRE-METADATA-SENTINEL-8f3a2c1d";
+        const PRIOR_SENTINEL: &str = "NACRE-METADATA-SENTINEL-4b7e0a96";
+
+        let dir = std::env::temp_dir().join(format!("nacre-metadata-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("metadata.db");
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+        }
+        let grit = Grit::open(&path, Options::new("nacre-test")).unwrap();
+
+        // A stored earlier episode carrying its own payload: the window
+        // rebuild must hand it back, and it must reach no prompt either.
+        let prior_id = grit.new_id();
+        grit.apply(GraphOp::AddEpisode {
+            id: prior_id,
+            source: "chat between friends".into(),
+            kind: "message".into(),
+            content: "Priya: morning!".into(),
+            occurred_at: now().timestamp_millis() - 60_000,
+            group_id: GROUP.into(),
+            metadata: Some(PRIOR_SENTINEL.into()),
+            mentions: vec![],
+        })
+        .unwrap();
+
+        let previous = retrieve_previous_episodes(
+            &grit,
+            GROUP,
+            EpisodeSource::Message,
+            now(),
+            PREVIOUS_EPISODE_WINDOW,
+        )
+        .unwrap();
+        assert_eq!(
+            previous
+                .iter()
+                .map(|e| e.metadata.as_deref())
+                .collect::<Vec<_>>(),
+            [Some(PRIOR_SENTINEL)],
+            "the previous-episode window hands stored metadata back verbatim"
+        );
+
+        let mut episode = episode(
+            "ep-metadata",
+            "Priya: I joined Northwind Labs today.",
+            "2026-07-10T12:00:00+00:00",
+        );
+        episode.group_id = GROUP.into();
+        episode.metadata = Some(SENTINEL.into());
+
+        let model = ScriptModel::new(vec![
+            (
+                "ExtractedEntities",
+                json!({"extracted_entities": [
+                    {"name": "Priya", "entity_type_id": 1, "episode_indices": [0]},
+                    {"name": "Northwind Labs", "entity_type_id": 0, "episode_indices": [0]},
+                ]}),
+            ),
+            (
+                "NodeResolutions",
+                json!({"entity_resolutions": [
+                    {"id": 0, "name": "Priya", "duplicate_candidate_id": -1},
+                    {"id": 1, "name": "Northwind Labs", "duplicate_candidate_id": -1},
+                ]}),
+            ),
+            (
+                "ExtractedEdges",
+                json!({"edges": [{
+                    "source_entity_name": "Priya",
+                    "target_entity_name": "Northwind Labs",
+                    "relation_type": "WORKS_AT",
+                    "fact": "Priya joined Northwind Labs.",
+                    "valid_at": "2026-07-10T00:00:00Z",
+                    "episode_indices": [0],
+                }]}),
+            ),
+            (
+                "SummarizedEntities",
+                json!({"summaries": [
+                    {"name": "Priya", "summary": "Priya works at Northwind Labs."},
+                ]}),
+            ),
+        ]);
+
+        let out = add_episode(
+            &grit,
+            &model,
+            &ConstEmbedder,
+            &episode,
+            &previous,
+            &options(),
+            now(),
+        )
+        .await
+        .unwrap();
+
+        // No prompt, schema name or model-size field of any request the run
+        // issued carries either payload.
+        let requests = model.all_requests();
+        assert!(
+            !requests.is_empty(),
+            "the run must actually have called the model, or this proves nothing"
+        );
+        assert!(
+            requests
+                .iter()
+                .any(|r| r.to_string().contains("Priya: morning!")),
+            "the previous-episode window must really reach a prompt, or the \
+             sweep below is checking nothing about it"
+        );
+        for request in &requests {
+            let rendered = request.to_string();
+            for sentinel in [SENTINEL, PRIOR_SENTINEL] {
+                assert!(
+                    !rendered.contains(sentinel),
+                    "episode metadata leaked into a {} request",
+                    request["schema_name"]
+                );
+            }
+        }
+
+        // Stored verbatim, and readable through both episode read paths.
+        let stored = grit.episode(out.episode_id).unwrap().unwrap();
+        assert_eq!(stored.metadata.as_deref(), Some(SENTINEL));
+        assert_eq!(
+            grit.episodes_in_group(GROUP)
+                .unwrap()
+                .iter()
+                .map(|e| e.metadata.clone())
+                .collect::<Vec<_>>(),
+            [Some(PRIOR_SENTINEL.to_owned()), Some(SENTINEL.to_owned())],
+            "the group scan hands both payloads back, chronological"
+        );
 
         drop(grit);
         for suffix in ["", "-wal", "-shm"] {

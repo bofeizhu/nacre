@@ -79,6 +79,32 @@ pub struct EpisodeInput {
     pub group_id: String,
     /// Event time, ISO 8601 (`datetime.isoformat()` form), if known.
     pub valid_at: Option<String>,
+    /// Application-defined payload, stored verbatim on the episode row and
+    /// handed back by every episode read path. A nacre extension with no
+    /// upstream counterpart (see DEVIATIONS.md "Episode metadata").
+    ///
+    /// Opaque to the pipeline in the strongest sense: it is never
+    /// interpolated into a prompt (no context builder reads it — pinned by
+    /// `pipeline::tests::metadata_is_stored_read_back_and_never_reaches_a_prompt`),
+    /// never embedded, never part of episode identity, and never used for
+    /// dedup, invalidation or retrieval. It exists so a host can carry its own
+    /// provenance — the row a memory came from, the document version, a
+    /// consent tag — alongside the episode without inventing a side table
+    /// that can drift out of sync with the graph.
+    ///
+    /// Write-once: grit has no update op for episodes and
+    /// [`crate::pipeline::add_episode`] refuses a second ingest under a
+    /// stored id, so changing an episode's metadata means
+    /// [`crate::forget::delete_episode`] plus a fresh ingest **under a new
+    /// id**. The delete tombstones the old id permanently and grit drops
+    /// writes naming a tombstoned id, so re-ingesting under it returns
+    /// `Ok` while storing neither the episode row nor its provenance,
+    /// leaving that ingest's nodes and edges evidenced by nothing — see
+    /// [`crate::forget::delete_episode`]. `None` (the default, and how the
+    /// field deserializes when absent) means the application stored
+    /// nothing, which is a different fact from an empty string.
+    #[serde(default)]
+    pub metadata: Option<String>,
 }
 
 /// A caller-defined entity type: name plus the description shown to the

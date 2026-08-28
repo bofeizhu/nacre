@@ -262,6 +262,7 @@ mod tests {
             source_description: "chat".into(),
             group_id: "g".into(),
             valid_at: Some(valid_at.into()),
+            metadata: None,
         }
     }
 

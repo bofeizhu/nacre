@@ -903,6 +903,112 @@ Traps hit, worth remembering:
   argument, so `Episode.id` could go FIRST (mirroring `EpisodeInput`)
   without touching one existing `Episode(...)` call site.
 
+## Milestone 10 — forgetting, and an episode's own provenance
+
+Rationale: the pipeline could only ever grow a graph. There was no way to
+take a memory back — no `remove_episode`, no group wipe — so a Layer 3 app
+could offer "delete this conversation" or "delete this workspace" only by
+deleting the whole file. Right-to-forget is not a feature that can be
+bolted on later by a host: only nacre knows which nodes and facts exist
+*because of* one episode and which ones survive it, and only grit can erase
+them without leaving an index entry behind. The same milestone carries
+`EpisodeInput.metadata`, because the two answer the same question from
+opposite ends: an app that can delete a memory needs to know which of its
+own records that memory came from.
+
+Non-goals: op-log redaction (grit's guarantee is "unreachable through every
+read API", not "gone from the file" — a compacted export would be a new
+grit decision); a new golden trace (deletion is deterministic and needs no
+oracle — see the test note below); undo.
+
+- [x] `EpisodeInput.metadata: Option<String>` (`#[serde(default)]`),
+      forwarded verbatim into `GraphOp::AddEpisode` and handed back by
+      `Grit::episode`, the group scan and the previous-episode window
+      rebuild. Excluded from every prompt by construction — all six
+      context builders cherry-pick episode fields — with a sentinel test
+      that sweeps every request a run issues, because nothing else would
+      catch a leak.
+      Gates: op_sequence pins regenerate BYTE-IDENTICAL (`None` is skipped
+      by grit's op serialization), conformance green on both traces.
+- [x] `nacre_core::forget`: `delete_episode(grit, id)` porting upstream's
+      `remove_episode`, and `delete_group(grit, group_id)` porting the
+      service-layer group wipe. Each collects every id first and commits
+      ONE `GraphOp::Purge` through `apply_batch` — one transaction, one
+      audit record — and skips the op entirely when there is nothing to
+      erase (an empty `Purge` fails the whole batch).
+      `PipelineError::EpisodeNotFound` mirrors `EpisodeExists`.
+      Gates: `tests/deletion.rs` green, DEVIATIONS.md entry for the
+      `episodes[0]` derivation, clippy/doc clean.
+- [ ] Bindings (Phase 3, not started): `deleteGroup`/`deleteEpisode` and
+      the `metadata` field on both binding surfaces —
+      `EpisodeJs`/`EpisodeRow` + `index.d.ts` regen for Node,
+      `Episode`/`EpisodeRow` + `scripts/build-swift.sh` regen for Swift —
+      plus the episode-by-id getter neither binding has today (an app
+      holding a provenance id from `searchEdges` or `mentionsOf` currently
+      has to scan the group to read its own metadata back). Node needs an
+      `EPISODE_NOT_FOUND_CODE` message prefix, the same napi limitation as
+      M9; Swift's `NacreError::EpisodeNotFound` case already exists. Fold
+      in the M9 carry-over while there: the sidecar
+      (`crates/nacre-node/sidecar/sidecar.mjs`) forwards neither `id` nor
+      `metadata`.
+      Gates: Node tests, XCTest, both against the local grit patch.
+- [ ] BLOCKED(needs the grit release): grit ships schema v6 (episode
+      metadata + `episode_targets`), then nacre bumps its `grit-core`
+      requirement, DROPS the `[patch.crates-io]` override, re-gates
+      against the registry and releases. Until then **this work stays
+      local** — CI resolves the published grit and every new test would
+      run red (the 2026-07-11 lesson).
+
+Notes worth keeping:
+
+- **Deletion needed no golden trace, and asking for one would have been a
+  category error.** The oracle exists to pin LLM-mediated judgment;
+  deletion makes no model call. What it needs instead is a *control*, and
+  replaying trace1 into a second group of the same database supplies one:
+  the replay key carries no group id (recordings are keyed on the request,
+  and no prompt context reads `group_id`) while every candidate pool the
+  pipeline consults IS group-scoped, so the second ingest issues
+  byte-identical requests and builds a structurally identical, id-disjoint
+  sibling. Deleting one group must leave the sibling byte-identical —
+  which is where a non-group-scoped index delete would show up, since the
+  FTS mirrors and vector tables are shared.
+- **The empty `Purge` is a trap, not a nicety.** grit rejects
+  `Purge { ids: [] }`, and `apply_batch` validates before it writes, so a
+  deletion of an already-empty group would fail the whole batch instead of
+  reporting zero counts. Both entry points skip the op; the test asserts
+  the rejection as well, so the reason for the skip stays visible.
+- **Nacre's own pipeline invariant is what makes group deletion
+  complete.** An edge's `group_id` is caller-supplied and independent of
+  its endpoints' groups — grit says so explicitly. The pipeline always
+  writes an edge into its episode's group, and
+  `ExtractEdgesOptions::group_id` is the documented way to break that;
+  a test pins what survives when it is broken, so the rustdoc caveat is a
+  tested claim rather than a hedge.
+- **Two enumeration boundaries neither surface can cross**, both recorded
+  rather than worked around: merge placeholders park in the DEFAULT group
+  `""` until the absorbed node's `AddNode` arrives (so a group scan misses
+  them, and `delete_group("")` can take one belonging to another
+  namespace — purging it tombstones the id, and the late `AddNode` becomes
+  a no-op), and orphan `node_updates`/`edge_invalidations` rows for
+  never-arrived ids carry no `group_id` at all.
+- **A merged-away draft row is nobody's provenance.** The pipeline
+  attributes the canonical id, so no episode deletion reaches the absorbed
+  draft; only `delete_group` does, because it enumerates rows instead of
+  evidence. Upstream has no such row to reach — it never persists one.
+- **"Delete plus a fresh ingest" needs a fresh ID, and only the docs can
+  say so.** Purge tombstones every id it names; grit gates its inserts on
+  that table, so re-ingesting under a deleted episode's id passes
+  `add_episode`'s idempotency check (the row really is absent), runs every
+  model call, commits — and silently loses the episode row and its
+  mentions while the nodes and edges land unevidenced, returning `Ok`.
+  Since `EpisodeInput.id` is the caller's idempotency key, reuse is the
+  natural reading of the write-once-`metadata` recipe, so the warning
+  belongs at every site that states it (rustdoc, DEVIATIONS, CHANGELOG).
+  A code-level guard would need a per-id tombstone read grit does not
+  expose — a candidate for the next grit batch if a caller ever trips it;
+  `tests/deletion.rs::re_adding_a_purged_id_is_a_silent_no_op` pins both
+  halves meanwhile.
+
 ## Later (do not start without a user decision)
 
 Coverage deepening, in the order agreed 2026-07-10 (activate when the
@@ -913,8 +1019,11 @@ Layer 3 app demonstrates the need, or on user say-so):
       golden trace exercising typed entities — the highest-value gap for
       a real memory product.
 - [ ] Golden traces #3+: bulk-ish episode volume (candidate-pool
-      saturation), group_id isolation, purge/right-to-forget.
-      (Trace #2 — text/json sources — was promoted into Milestone 5.)
+      saturation). (Trace #2 — text/json sources — was promoted into
+      Milestone 5. group_id isolation and purge/right-to-forget were
+      settled in Milestone 10 WITHOUT a capture run: deletion makes no
+      model call, so trace1 replayed into two groups of one database is a
+      stronger check than a new trace would have been.)
 - [ ] Port upstream's pure-function edge-case tests (helpers_test.py,
       test_text_utils.py, datetime/`ensure_utc` handling) as additional
       unit tests over the already-ported functions — cheap hardening

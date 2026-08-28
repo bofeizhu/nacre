@@ -31,6 +31,7 @@ fn episode(name: &str, content: &str, at: &str) -> EpisodeInput {
         source_description: "message".into(),
         group_id: GROUP.into(),
         valid_at: Some(at.into()),
+        metadata: None,
     }
 }
 

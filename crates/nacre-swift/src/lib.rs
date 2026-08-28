@@ -103,6 +103,18 @@ pub enum NacreError {
         /// The id that is already stored — the one that was passed in.
         id: String,
     },
+    /// The episode asked for is not stored, so nothing was deleted. The
+    /// mirror of [`NacreError::EpisodeExists`]: a host retrying a delete
+    /// that already succeeded sees this, and only the host knows whether
+    /// that is the expected second attempt or a bug in its bookkeeping.
+    ///
+    /// Reachable once the deletion surface is bound (bindings phase); the
+    /// case exists now so the error taxonomy stays 1:1 with the core's.
+    #[error("episode {id} not found")]
+    EpisodeNotFound {
+        /// The id that is not stored — the one that was passed in.
+        id: String,
+    },
     /// A grit storage failure.
     #[error("storage: {message}")]
     Storage {
@@ -150,6 +162,9 @@ impl From<PipelineError> for NacreError {
                 message: e.to_string(),
             },
             PipelineError::EpisodeExists(id) => NacreError::EpisodeExists { id: id.to_string() },
+            PipelineError::EpisodeNotFound(id) => {
+                NacreError::EpisodeNotFound { id: id.to_string() }
+            }
         }
     }
 }
@@ -527,6 +542,9 @@ impl Memory {
                 .valid_at
                 .clone()
                 .or_else(|| Some(now.to_rfc3339_opts(chrono::SecondsFormat::Secs, false))),
+            // `EpisodeInput.metadata` is not on the Swift record yet — it
+            // lands with the deletion surface in the bindings phase.
+            metadata: None,
         };
         let previous = retrieve_previous_episodes(
             &self.grit,

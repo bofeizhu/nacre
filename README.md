@@ -76,6 +76,11 @@ let outcome = add_episode(&grit, &llm, &embedder, &episode, &previous,
 
 // Recall: BM25 + vector legs, RRF-fused, provenance attached.
 let hits = search_edges(&grit, &embedder, "Where does Priya work?", "chat", 10).await?;
+
+// Forget: take one memory back, or a whole namespace. Entities and facts
+// only this episode evidenced go; anything corroborated elsewhere stays.
+let gone = delete_episode(&grit, outcome.episode_id)?;   // gone.kept_node_ids survived
+delete_group(&grit, "chat")?;                            // the namespace, whole
 ```
 
 ### Model providers
@@ -154,6 +159,7 @@ Four tiers:
 | Context windows | last-10 previous episodes from the graph, byte-equal to upstream's prompt windows |
 | Embedding persistence | name/fact vectors stored at write time; warm graphs re-embed nothing |
 | Hybrid retrieval | BM25 + query-vector legs, RRF-fused, provenance attached *(rank order advisory — see DEVIATIONS)* |
+| Deletion (right-to-forget) | `remove_episode`'s cascade — sole-evidence nodes and created facts go, corroborated ones stay — plus whole-group erasure; each one `Purge`, one transaction *(no oracle applies: deletion makes no model call. Verified against a golden trace replayed into two sibling groups of one database, the untouched sibling as control — see DEVIATIONS)* |
 
 ### 🧪 Ported, awaiting trace coverage
 
@@ -164,7 +170,7 @@ prompt level; no golden trace exercises them yet.
 ### ⏳ Deferred until a proven need
 
 Custom node/edge **attribute extraction** (typed ontologies); golden
-traces #2+ (volume, multi-group isolation, purge).
+trace #3+ (episode volume, candidate-pool saturation).
 
 ### 🚫 Out of scope by design
 

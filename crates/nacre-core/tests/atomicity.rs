@@ -61,6 +61,7 @@ fn trace_episode(spec: &Value, group_id: &str, id: Uuid) -> EpisodeInput {
         source_description: spec["source_description"].as_str().unwrap().into(),
         group_id: group_id.to_owned(),
         valid_at: Some(spec["reference_time"].as_str().unwrap().into()),
+        metadata: None,
     }
 }
 

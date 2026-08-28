@@ -94,7 +94,12 @@ fn pipeline_error(e: PipelineError) -> Error {
             Status::GenericFailure,
             format!("{EPISODE_EXISTS_CODE}: episode {id} already exists"),
         ),
-        e @ (PipelineError::Model(_) | PipelineError::Storage(_)) => generic(e),
+        // The deletion surface is not bound here yet, so no JS caller can
+        // produce this one; it renders like any other failure until the
+        // bindings phase gives it a code of its own.
+        e @ (PipelineError::Model(_)
+        | PipelineError::Storage(_)
+        | PipelineError::EpisodeNotFound(_)) => generic(e),
     }
 }
 
@@ -168,6 +173,9 @@ impl Memory {
                 .valid_at
                 .clone()
                 .or_else(|| Some(now.to_rfc3339_opts(chrono::SecondsFormat::Secs, false))),
+            // `EpisodeInput.metadata` is not on `EpisodeJs` yet — it lands
+            // with the deletion surface in the bindings phase.
+            metadata: None,
         };
         let model = build_model(llm)?;
         let embedder = build_embedder(embedder)?;

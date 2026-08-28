@@ -269,6 +269,7 @@ mod tests {
             source_description: "chat between friends".into(),
             group_id: "trace-test".into(),
             valid_at: Some(valid_at.into()),
+            metadata: None,
         }
     }
 
@@ -401,6 +402,7 @@ mod tests {
             source_description: "CRM export".into(),
             group_id: "g".into(),
             valid_at: Some("2026-07-01T00:00:00+00:00".into()),
+            metadata: None,
         }];
         let options = ExtractNodesOptions::default();
         let response = json!({"extracted_entities": [
