@@ -199,8 +199,9 @@ impl Pending {
             // Never read back within this episode.
             GraphOp::AddEdge { .. }
             | GraphOp::InvalidateEdge { .. }
-            | GraphOp::AddEpisode { .. }
-            | GraphOp::Purge { .. } => {}
+            | GraphOp::AddEpisode { .. } => {}
+            // The purge family belongs to `forget`; an ingest never emits it.
+            GraphOp::Purge { .. } | GraphOp::PurgeNodeFields { .. } => {}
         }
         self.items.push(WriteItem::Op(op));
         Ok(())

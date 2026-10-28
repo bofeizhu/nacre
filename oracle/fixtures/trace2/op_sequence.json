@@ -722,5 +722,46 @@
         "$n33"
       ]
     }
-  ]
+  ],
+  "deletion": {
+    "deleted_episode": "$n34",
+    "op_count": 5,
+    "ops": [
+      {
+        "op": "purge",
+        "ids": [
+          "$n30",
+          "$n32",
+          "$n33",
+          "$n34"
+        ]
+      },
+      {
+        "op": "purge_node_fields",
+        "ids": [
+          "$n2",
+          "$n3",
+          "$n11"
+        ],
+        "fields": [
+          "summary"
+        ]
+      },
+      {
+        "op": "update_node",
+        "id": "$n2",
+        "summary": "Elena Vasquez is the CEO of Harborview Robotics.\nHarborview Robotics is based in Lisbon.\nHarborview Robotics was founded in 2021 by Rafael Costa\nElena Vasquez serves as chief executive officer of Harborview Robotics\nRafael Costa serves as chief technology officer of Harborview Robotics\nHarborview Robotics' flagship product is the Atlas arm\nThe Atlas arm is deployed in warehouse automation across Europe\nHarborview Robotics presented at Web Summit."
+      },
+      {
+        "op": "update_node",
+        "id": "$n3",
+        "summary": "Elena Vasquez is the CEO of Harborview Robotics.\nElena Vasquez serves as chief executive officer of Harborview Robotics"
+      },
+      {
+        "op": "update_node",
+        "id": "$n11",
+        "summary": "Harborview Robotics was founded in 2021 by Rafael Costa\nRafael Costa serves as chief technology officer of Harborview Robotics\nRafael Costa presented the product Atlas arm v2."
+      }
+    ]
+  }
 }

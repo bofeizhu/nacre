@@ -79,7 +79,7 @@ let hits = search_edges(&grit, &embedder, "Where does Priya work?", "chat", 10).
 
 // Forget: take one memory back, or a whole namespace. Entities and facts
 // only this episode evidenced go; anything corroborated elsewhere stays.
-let gone = delete_episode(&grit, outcome.episode_id)?;   // gone.kept_node_ids survived
+let gone = delete_episode(&grit, outcome.episode_id)?;   // gone.kept_node_ids survived, summaries rebuilt
 delete_group(&grit, "chat")?;                            // the namespace, whole
 ```
 
@@ -160,7 +160,7 @@ Four tiers:
 | Context windows | last-10 previous episodes from the graph, byte-equal to upstream's prompt windows |
 | Embedding persistence | name/fact vectors stored at write time; warm graphs re-embed nothing |
 | Hybrid retrieval | BM25 + query-vector legs, RRF-fused, provenance attached *(rank order advisory — see DEVIATIONS)* |
-| Deletion (right-to-forget) | `remove_episode`'s cascade — sole-evidence nodes and created facts go, corroborated ones stay — plus whole-group erasure; each one `Purge`, one transaction *(no oracle applies: deletion makes no model call. Verified against a golden trace replayed into two sibling groups of one database, the untouched sibling as control — see DEVIATIONS)* |
+| Deletion (right-to-forget) | `remove_episode`'s cascade — sole-evidence nodes and created facts go, corroborated ones stay — plus whole-group erasure, each one transaction. **Kept nodes forget what their summaries learned**: an episode deletion resets each kept node's summary (every earlier value out of the live file and the op-log, via grit's `PurgeNodeFields`) and rebuilds it from the node's surviving facts — a nacre extension; facts a later episode derived through its context window, invalidations and labels are not reached *(no oracle applies: deletion makes no model call. Verified against a golden trace replayed into two sibling groups of one database, the untouched sibling as control, and by sweeping every prompt of a later ingest — see DEVIATIONS)* |
 
 ### 🧪 Ported, awaiting trace coverage
 

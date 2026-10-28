@@ -1072,6 +1072,74 @@ Notes worth keeping:
   `tests/deletion.rs::re_adding_a_purged_id_is_a_silent_no_op` pins both
   halves meanwhile.
 
+## Milestone 11 — kept nodes forget what their summaries learned
+
+Rationale: Milestone 10's promise is "take one memory back", and it was
+only half true. `delete_episode` (like upstream's `remove_episode`) keeps
+every node another episode also mentions — correctly — but keeps its
+summary too, and the summarize pass had rewritten that summary while the
+deleted episode was ingested: in the fact-append shortcut, by appending the
+facts of the very edges the purge erases. Measured on both golden traces:
+every episode deletion left the facts it created, verbatim, in kept
+summaries, and those summaries go back to the model in the dedupe and
+summarize prompts of the next ingest that touches the node. Any host that
+routes many episodes through one shared entity (one user, one subject) hit
+it on every deletion.
+
+Decided 2026-10-29, in two steps:
+
+- [x] **grit 0.5.0: `PurgeNodeFields`** — grit could not erase the history
+      of a field on a row it keeps (`UpdateNode` overwrites the live value;
+      every earlier value stayed in the op-log by contract, and invariants
+      4/5 let only `Purge` edit the log). The new purge-family op resets
+      the listed fields, removes their earlier values from the op-log, and
+      leaves a floor that strips them from later arrivals; it amends grit's
+      invariants 4, 5 and 8. Also in 0.5.0: `node_history` lists one
+      batch's edges in batch order (the rebuild below reads it).
+- [x] **nacre 0.4.0: reset and rebuild.** `delete_episode` adds, in the
+      same batch as the `Purge`, a `PurgeNodeFields` on every kept node's
+      summary and an `UpdateNode` writing a fresh list of the node's
+      surviving facts — the fact-append shortcut re-run over what the graph
+      still holds (creation order, own group, both endpoints live, newest
+      whole facts within `2 × MAX_SUMMARY_CHARS`). Model-free.
+      `DeleteEpisodeOutcome` gains no field: every kept node is reset, so
+      such a list would repeat `kept_node_ids` (documented there instead).
+
+Options weighed and rejected (the investigation is summarized in
+DEVIATIONS.md "Episode deletion resets kept nodes' summaries"): a plain
+reset (honest, but a shared entity would lose its whole summary on every
+deletion and the fact-append regime never rebuilds it); resetting only the
+summaries the deleted episode's pass changed (grit records no batch
+identity, so it is not derivable on a synced replica, and it spared one
+node in two of nine trace deletions); subtracting the deleted episode's
+lines (unsound once an LLM pass has paraphrased them); re-keying the node
+through a merge and a purge (grit keeps mention rows on their original
+ids, so every other episode would lose its provenance link).
+
+Test notes:
+
+- **Fidelity over the traces.** Deleting each trace's last episode, six of
+  seven rebuilt summaries equal the old summary with the deleted episode's
+  facts removed; the seventh differs only where upstream appended one fact
+  twice (a node two drafts resolved to). Pinned in the trace1 sibling test.
+- **The prompt sweep needed a fixture that forces the LLM paths.** Dedupe
+  only asks the model about a draft without a unique exact-name match, and
+  the summarize step only calls it past the fact-append bound, so the sweep
+  test builds a kept node whose rebuilt summary plus one new fact crosses
+  2000 characters, with positive controls that both prompts really carried
+  the rebuilt summaries.
+- **op_sequence now pins a deletion batch** per trace (`deletion`), with
+  purge-op ids and the rebuilt-summary updates sorted by placeholder (uuid
+  order within one millisecond is random between runs). The ingest pins did
+  not move.
+
+Not reached, and documented rather than promised (forget.rs, "What
+forgotten means"): facts and summaries a later episode derived with the
+deleted one in its previous-episode window; invalidations it caused on kept
+edges (grit's invalidations are a MIN register with no retraction); label
+promotions and a kept node's name; a concurrent writer whose summary
+refresh carries a later HLC.
+
 ## Later (do not start without a user decision)
 
 Coverage deepening, in the order agreed 2026-07-10 (activate when the

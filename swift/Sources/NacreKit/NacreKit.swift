@@ -81,7 +81,10 @@
 ///   each commit one transaction, and what they promise is *gone from the
 ///   live file*: rows, indexes, stored vectors and the op-log entries that
 ///   carried them, with the pages they free zeroed — so no read, no export
-///   and no re-delivery from a peer brings the content back. Two limits
+///   and no re-delivery from a peer brings the content back. A node an
+///   episode deletion keeps (``DeleteEpisodeResult/keptNodeIds``) has its
+///   summary reset the same way and rebuilt from its surviving facts, so
+///   nothing the deleted episode taught it reaches a prompt again. Two limits
 ///   this package cannot lift: "no byte remains" needs grit's `compact()`
 ///   maintenance call, which it does not expose, and device or OS backups,
 ///   copies taken before the delete, and a device that never receives the

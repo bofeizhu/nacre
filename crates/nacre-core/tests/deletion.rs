@@ -1,7 +1,8 @@
 //! Forgetting: `delete_group` erases exactly one namespace, and
 //! `delete_episode` erases exactly what one episode is the sole evidence
-//! for. Both commit as a single `Purge` — one transaction, one audit
-//! record.
+//! for. Both commit in one transaction: a group as a single `Purge`, an
+//! episode as its `Purge` plus the reset and rebuild of the summaries of
+//! the nodes it keeps.
 //!
 //! Two tiers, because the laws and the realism are separable:
 //!
@@ -10,8 +11,10 @@
 //!   boundaries a group scan cannot cross (an edge written into another
 //!   group, a merge placeholder parked in the default group), the
 //!   documented reach of the erasure into the op-log (the entries that
-//!   carried a purged id go; the ones that merely name it stay), and that a
-//!   forgotten id is spent — re-using one is a silent no-op.
+//!   carried a purged id go; the ones that merely name it stay), that a
+//!   forgotten id is spent — re-using one is a silent no-op — and that a
+//!   node an episode deletion keeps forgets what its summary learned from
+//!   that episode, down to the prompts a later ingest sends.
 //! - **A golden trace replayed into two sibling groups of one database**
 //!   for the same laws over a graph the real pipeline wrote — merges,
 //!   invalidations, summary updates, mentions and vectors included. The
@@ -25,13 +28,18 @@
 //! Each scenario gets its own database file — these tests run in parallel,
 //! and a shared path surfaces as a SQLite "disk I/O error".
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use chrono::{DateTime, TimeZone, Utc};
-use grit_core::{GraphOp, Grit, Options, WriteItem};
+use grit_core::{GraphOp, Grit, ManualClock, NodeField, Options, WriteItem};
 use nacre_core::extract::{EpisodeInput, EpisodeSource};
 use nacre_core::forget::{delete_episode, delete_group};
-use nacre_core::model::{EmbedderMeta, RecordingStore, ReplayEmbedder, ReplayModel};
+use nacre_core::model::{
+    CompletionRequest, Embedder, EmbedderMeta, LanguageModel, ModelError, RecordingStore,
+    ReplayEmbedder, ReplayModel,
+};
 use nacre_core::pipeline::{
     AddEpisodeOptions, PREVIOUS_EPISODE_WINDOW, PipelineError, add_episode,
     retrieve_previous_episodes,
@@ -138,7 +146,8 @@ fn to_value<T: serde::Serialize>(row: &T) -> Value {
 /// Serialized, in log order.
 ///
 /// Ops that merely *reference* an id (`InvalidateEdge`, `MergeNodes`,
-/// `Purge`, and the endpoint/mention fields of the ops above) are not
+/// `Purge`, `PurgeNodeFields`, and the endpoint/mention fields of the ops
+/// above) are not
 /// creators: they are opaque uuids, they survive a purge by design, and
 /// they are what keeps grit's merge laws exact. This mirrors grit's own
 /// rule, which is not public API.
@@ -151,9 +160,10 @@ fn creator_ops(grit: &Grit, ids: &[Uuid]) -> Vec<String> {
             | GraphOp::UpdateNode { id, .. }
             | GraphOp::AddEdge { id, .. }
             | GraphOp::AddEpisode { id, .. } => ids.contains(id),
-            GraphOp::InvalidateEdge { .. } | GraphOp::MergeNodes { .. } | GraphOp::Purge { .. } => {
-                false
-            }
+            GraphOp::InvalidateEdge { .. }
+            | GraphOp::MergeNodes { .. }
+            | GraphOp::Purge { .. }
+            | GraphOp::PurgeNodeFields { .. } => false,
         })
         .map(|(_, entry)| serde_json::to_string(&entry.op).unwrap())
         .collect()
@@ -860,6 +870,568 @@ async fn re_adding_a_purged_id_is_a_silent_no_op() {
 }
 
 // ---------------------------------------------------------------------
+// Tier A — kept nodes forget what their summaries learned
+// ---------------------------------------------------------------------
+
+/// The deleted episode's own words. High-entropy and unlike any prompt
+/// text, so a substring hit anywhere is a leak, never a coincidence.
+const FORGOTTEN: &str = "zephyrine-41c9";
+
+/// A database with an injected clock, advanced one millisecond per write:
+/// `node_history` orders a node's edges by creation time, so a test that
+/// pins a rebuilt summary needs creation times that are distinct and known.
+fn open_clocked(scenario: &str) -> (Grit, PathBuf, Arc<ManualClock>) {
+    let dir = std::env::temp_dir().join(format!("nacre-deletion-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join(format!("{scenario}.db"));
+    remove_db(&path);
+    let clock = Arc::new(ManualClock::new(1_700_000_000_000));
+    let grit = Grit::open(&path, Options::new("nacre-deletion").clock(clock.clone())).unwrap();
+    (grit, path, clock)
+}
+
+/// Writes a graph in the shape the pipeline leaves behind: nodes created
+/// with an empty summary, each episode's new facts appended to both
+/// endpoints' summaries by the fact-append shortcut and persisted as
+/// summary-only `UpdateNode`s, and the episode mentioning every node and
+/// edge it evidenced. One op per write, one millisecond apart.
+struct Writer<'a> {
+    grit: &'a Grit,
+    clock: &'a ManualClock,
+    group: String,
+    summaries: HashMap<Uuid, String>,
+}
+
+impl Writer<'_> {
+    fn op(&self, op: GraphOp) {
+        self.clock.advance_ms(1);
+        self.grit.apply(op).unwrap();
+    }
+
+    fn node(&mut self, name: &str) -> Uuid {
+        self.node_in(name, &self.group.clone())
+    }
+
+    fn node_in(&mut self, name: &str, group: &str) -> Uuid {
+        let id = self.grit.new_id();
+        self.op(GraphOp::AddNode {
+            id,
+            kind: "Entity".into(),
+            name: name.into(),
+            summary: String::new(),
+            attrs: json!({"labels": ["Entity"]}),
+            group_id: group.into(),
+        });
+        self.summaries.insert(id, String::new());
+        id
+    }
+
+    fn edge_in(&self, group: &str, src: Uuid, dst: Uuid, fact: &str) -> Uuid {
+        let id = self.grit.new_id();
+        self.op(GraphOp::AddEdge {
+            id,
+            src,
+            dst,
+            rel: "RELATES_TO".into(),
+            fact: fact.into(),
+            attrs: json!({}),
+            group_id: group.into(),
+            valid_at: None,
+            invalid_at: None,
+        });
+        id
+    }
+
+    /// One episode: `facts` are the edges it creates (appended to both
+    /// endpoints' summaries), `also` the existing nodes and edges it merely
+    /// re-mentions.
+    fn episode(
+        &mut self,
+        content: &str,
+        facts: &[(Uuid, Uuid, &str)],
+        also: &[Uuid],
+    ) -> (Uuid, Vec<Uuid>) {
+        let mut mentions: Vec<Uuid> = also.to_vec();
+        let mut edges = Vec::new();
+        let mut touched: Vec<Uuid> = Vec::new();
+        for &(src, dst, fact) in facts {
+            let group = self.group.clone();
+            let edge = self.edge_in(&group, src, dst, fact);
+            edges.push(edge);
+            mentions.extend([src, dst, edge]);
+            for end in [src, dst] {
+                let summary = self.summaries.get_mut(&end).unwrap();
+                *summary = format!("{summary}\n{fact}").trim().to_owned();
+                if !touched.contains(&end) {
+                    touched.push(end);
+                }
+            }
+        }
+        for node in touched {
+            self.op(GraphOp::UpdateNode {
+                id: node,
+                name: None,
+                summary: Some(self.summaries[&node].clone()),
+                kind: None,
+                attrs: None,
+            });
+        }
+        mentions.sort();
+        mentions.dedup();
+        let id = self.grit.new_id();
+        self.clock.advance_ms(1);
+        let occurred_at = self.clock.now_ms_for_test();
+        self.op(GraphOp::AddEpisode {
+            id,
+            source: "chat".into(),
+            kind: "message".into(),
+            content: content.into(),
+            occurred_at,
+            group_id: self.group.clone(),
+            metadata: None,
+            mentions,
+        });
+        (id, edges)
+    }
+}
+
+/// `ManualClock` reads through grit's `Clock` trait.
+trait NowForTest {
+    fn now_ms_for_test(&self) -> i64;
+}
+
+impl NowForTest for ManualClock {
+    fn now_ms_for_test(&self) -> i64 {
+        grit_core::Clock::now_ms(self)
+    }
+}
+
+/// A long, distinct fact from the first episode — long enough that ten of
+/// them sit just under the fact-append bound, which is what lets the sweep
+/// below push a kept node's rebuilt summary through a real LLM summary pass.
+fn ledger_fact(i: usize) -> String {
+    format!(
+        "Priya shipped release {i:02} of the Northwind Labs ledger service, coordinating the \
+         migration plan, the rollback drill, the on-call handoff and the customer notes."
+    )
+}
+
+struct KeptGraph {
+    priya: Uuid,
+    northwind: Uuid,
+    biscuit: Uuid,
+    queens: Uuid,
+    /// The episode the tests delete.
+    deleted: Uuid,
+    /// Priya's summary as the rebuild must leave it.
+    priya_rebuilt: String,
+    /// An edge incident to Priya in another group, and one whose other
+    /// endpoint an earlier purge erased: neither may enter the rebuild.
+    cross_group_fact: &'static str,
+    ghost_fact: &'static str,
+}
+
+/// Three episodes about Priya. The second — the one deleted — adopts a dog
+/// whose name is [`FORGOTTEN`], and the fact-append shortcut writes that
+/// into Priya's and the dog's summaries; the third episode keeps both nodes
+/// alive, so a correct deletion must keep them and still forget the dog's
+/// name.
+fn kept_graph(grit: &Grit, clock: &ManualClock) -> KeptGraph {
+    let mut w = Writer {
+        grit,
+        clock,
+        group: "kept".into(),
+        summaries: HashMap::new(),
+    };
+    let priya = w.node("Priya");
+    let northwind = w.node("Northwind Labs");
+    let ledger: Vec<String> = (1..=10).map(ledger_fact).collect();
+    let ledger_facts: Vec<(Uuid, Uuid, &str)> = ledger
+        .iter()
+        .map(|f| (priya, northwind, f.as_str()))
+        .collect();
+    let (_, ledger_edges) = w.episode(
+        "Priya: ten releases of the ledger, all shipped.",
+        &ledger_facts,
+        &[],
+    );
+
+    let biscuit = w.node("Biscuit");
+    let adopted = format!("Priya adopted a dog named {FORGOTTEN}.");
+    let (deleted, _) = w.episode(
+        &format!("Priya: we adopted {FORGOTTEN} today! Still shipping the ledger."),
+        &[(priya, biscuit, &adopted)],
+        // Re-states the first episode's fact: corroboration, not creation.
+        &[ledger_edges[0], northwind],
+    );
+
+    let queens = w.node("Queens");
+    w.episode(
+        "Priya: walking Biscuit before the commute in from Queens.",
+        &[
+            (priya, queens, "Priya commutes from Queens."),
+            (biscuit, priya, "Biscuit is Priya's dog."),
+        ],
+        &[],
+    );
+
+    // Hand-written residue a rebuild must not pick up.
+    let cross_group_fact = "Priya mentors a colleague in another workspace.";
+    w.edge_in("elsewhere", priya, northwind, cross_group_fact);
+    let xavier = w.node("Xavier");
+    let ghost_fact = "Priya met Xavier at the conference.";
+    w.edge_in("kept", priya, xavier, ghost_fact);
+    w.op(GraphOp::Purge { ids: vec![xavier] });
+
+    let mut rebuilt = ledger;
+    rebuilt.push("Priya commutes from Queens.".into());
+    rebuilt.push("Biscuit is Priya's dog.".into());
+    KeptGraph {
+        priya,
+        northwind,
+        biscuit,
+        queens,
+        deleted,
+        priya_rebuilt: rebuilt.join("\n"),
+        cross_group_fact,
+        ghost_fact,
+    }
+}
+
+fn oplog_text(grit: &Grit) -> String {
+    grit.oplog_since(0)
+        .unwrap()
+        .iter()
+        .map(|(_, entry)| serde_json::to_string(&entry.op).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn export_text(grit: &Grit) -> String {
+    let mut buf = Vec::new();
+    grit.export_jsonl(&mut buf).unwrap();
+    String::from_utf8(buf).unwrap()
+}
+
+/// The whole reset in one graph: every kept node's summary is rebuilt from
+/// its surviving facts — oldest first, in its own group, both endpoints
+/// live — and the deleted episode's words are gone from the summaries, the
+/// op-log, the export and the search index. One batch: the `Purge`, one
+/// `PurgeNodeFields`, then one rebuilt `UpdateNode` per kept node.
+#[test]
+fn delete_episode_resets_and_rebuilds_the_summaries_it_keeps() {
+    let (grit, path, clock) = open_clocked("kept-summaries");
+    let g = kept_graph(&grit, &clock);
+    let queens_before = grit.node(g.queens).unwrap().unwrap().summary;
+    assert!(
+        grit.node(g.priya)
+            .unwrap()
+            .unwrap()
+            .summary
+            .contains(FORGOTTEN),
+        "the setup must reproduce the leak: the summary learned the dog's name"
+    );
+    let log_before = grit.oplog_since(0).unwrap().len();
+
+    let outcome = delete_episode(&grit, g.deleted).unwrap();
+    assert_eq!(
+        sorted(outcome.kept_node_ids.clone()),
+        sorted(vec![g.priya, g.northwind, g.biscuit])
+    );
+    assert_eq!(outcome.purged_node_ids, Vec::<Uuid>::new());
+    assert_eq!(outcome.purged_edge_ids.len(), 1, "the adoption fact");
+
+    let summary = |id: Uuid| grit.node(id).unwrap().unwrap().summary;
+    assert_eq!(summary(g.priya), g.priya_rebuilt);
+    assert_eq!(summary(g.biscuit), "Biscuit is Priya's dog.");
+    assert_eq!(
+        summary(g.northwind),
+        (1..=10).map(ledger_fact).collect::<Vec<_>>().join("\n"),
+        "a node whose summary the episode never changed is rebuilt to the same facts"
+    );
+    assert_eq!(
+        summary(g.queens),
+        queens_before,
+        "a node the episode never mentioned is untouched"
+    );
+    assert!(!summary(g.priya).contains(g.cross_group_fact));
+    assert!(!summary(g.priya).contains(g.ghost_fact));
+
+    for (place, text) in [
+        ("op-log", oplog_text(&grit)),
+        ("export", export_text(&grit)),
+    ] {
+        assert!(
+            !text.contains(FORGOTTEN),
+            "the {place} still carries the forgotten name"
+        );
+    }
+    assert!(
+        grit.search(grit_core::Query::text(FORGOTTEN).group("kept"))
+            .unwrap()
+            .is_empty()
+    );
+
+    // The batch, in order, at the tail of the log.
+    let log = grit.oplog_since(0).unwrap();
+    let tail: Vec<&GraphOp> = log.iter().map(|(_, e)| &e.op).rev().take(5).collect();
+    let mut rebuilt: Vec<Uuid> = tail[..3]
+        .iter()
+        .map(|op| match op {
+            GraphOp::UpdateNode {
+                id,
+                summary: Some(_),
+                name: None,
+                kind: None,
+                attrs: None,
+            } => *id,
+            other => panic!("expected a rebuilt summary, got {other:?}"),
+        })
+        .collect();
+    rebuilt.sort();
+    assert_eq!(rebuilt, sorted(outcome.kept_node_ids.clone()));
+    assert!(matches!(
+        tail[3],
+        GraphOp::PurgeNodeFields { ids, fields }
+            if sorted(ids.clone()) == sorted(outcome.kept_node_ids.clone())
+                && fields == &[NodeField::Summary]
+    ));
+    assert!(matches!(tail[4], GraphOp::Purge { .. }));
+    // Five entries in; out went the episode, its fact, and every
+    // summary-only update the three kept nodes ever had (one per episode
+    // that appended to them: three for Priya, two for Biscuit, one for
+    // Northwind).
+    let removed = 1 + 1 + 6;
+    assert_eq!(log.len(), log_before + 5 - removed);
+
+    drop(grit);
+    remove_db(&path);
+}
+
+/// The rebuild keeps the newest whole facts that fit in the fact-append
+/// bound (`2 × MAX_SUMMARY_CHARS`), oldest first within them — the most
+/// upstream ever stores without an LLM pass.
+#[test]
+fn a_rebuilt_summary_keeps_the_newest_facts_within_the_bound() {
+    let (grit, path, clock) = open_clocked("kept-bound");
+    let mut w = Writer {
+        grit: &grit,
+        clock: &clock,
+        group: "bound".into(),
+        summaries: HashMap::new(),
+    };
+    let hub = w.node("Hub");
+    let other = w.node("Other");
+    // Thirty facts of exactly 100 characters each.
+    let facts: Vec<String> = (0..30)
+        .map(|i| format!("Hub fact {i:02}: {}", "x".repeat(87)))
+        .collect();
+    assert!(facts.iter().all(|f| f.chars().count() == 100));
+    for fact in &facts {
+        w.episode("another day at the hub", &[(hub, other, fact)], &[]);
+    }
+    let (deleted, _) = w.episode(
+        &format!("hub and {FORGOTTEN}"),
+        &[(hub, other, FORGOTTEN)],
+        &[],
+    );
+
+    delete_episode(&grit, deleted).unwrap();
+    // 19 facts and 18 newlines are 1918 characters; a 20th would be 2019.
+    let expected = facts[11..].join("\n");
+    assert_eq!(expected.chars().count(), 1918);
+    assert_eq!(grit.node(hub).unwrap().unwrap().summary, expected);
+
+    drop(grit);
+    remove_db(&path);
+}
+
+/// A language model that answers by schema name and records every request
+/// — what a test needs to assert what the model was *not* shown. (The
+/// pipeline's own test double is private to its unit tests.)
+struct ScriptModel {
+    responses: Vec<(&'static str, Value)>,
+    seen: Mutex<Vec<Value>>,
+}
+
+impl LanguageModel for ScriptModel {
+    fn complete(
+        &self,
+        request: &CompletionRequest,
+    ) -> impl std::future::Future<Output = Result<Value, ModelError>> + Send {
+        self.seen
+            .lock()
+            .unwrap()
+            .push(serde_json::to_value(request).unwrap());
+        let result = self
+            .responses
+            .iter()
+            .find(|(schema, _)| *schema == request.schema_name)
+            .map(|(_, response)| response.clone())
+            .ok_or_else(|| ModelError::ReplayMiss {
+                canonical_request: request.schema_name.clone(),
+            });
+        async move { result }
+    }
+}
+
+/// Every input embeds to the same vector: every stored node is a dedup
+/// candidate for every draft, so the candidate pool is the whole group.
+struct ConstEmbedder;
+
+impl Embedder for ConstEmbedder {
+    fn meta(&self) -> EmbedderMeta {
+        EmbedderMeta {
+            model_id: "const-test".into(),
+            dim: 3,
+            model_version: String::new(),
+        }
+    }
+
+    async fn embed(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>, ModelError> {
+        Ok(inputs.iter().map(|_| vec![1.0, 1.0, 1.0]).collect())
+    }
+}
+
+/// The promise, end to end: after the deletion, the next ingest that
+/// touches the kept nodes shows the model their rebuilt summaries — in the
+/// dedupe prompt and in an LLM summary pass — and nothing the deleted
+/// episode said, in any request it issues. Swept like the metadata
+/// sentinel: every request, rendered whole.
+#[tokio::test]
+async fn a_later_ingest_never_sees_what_the_deleted_episode_taught() {
+    let (grit, path, clock) = open_clocked("kept-sweep");
+    let g = kept_graph(&grit, &clock);
+    delete_episode(&grit, g.deleted).unwrap();
+
+    // "Priya" resolves to the stored node by exact name (no model call), so
+    // her rebuilt summary goes to the summarize step — and this fact pushes
+    // it past the fact-append bound, forcing a real LLM summary pass.
+    // "Biscuit the dog" is no exact match, so it goes to the dedupe prompt
+    // with the whole group as candidates.
+    let long_fact = format!(
+        "Priya took Biscuit the dog to the vet in Queens, {}",
+        "then to the park and back along the river path. ".repeat(10)
+    );
+    assert!(
+        g.priya_rebuilt.chars().count() + 1 + long_fact.chars().count()
+            > 2 * nacre_core::prompts::MAX_SUMMARY_CHARS,
+        "the fixture must push Priya past the fact-append bound"
+    );
+    let model = ScriptModel {
+        responses: vec![
+            (
+                "ExtractedEntities",
+                json!({"extracted_entities": [
+                    {"name": "Priya", "entity_type_id": 0, "episode_indices": [0]},
+                    {"name": "Biscuit the dog", "entity_type_id": 0, "episode_indices": [0]},
+                ]}),
+            ),
+            (
+                "NodeResolutions",
+                json!({"entity_resolutions": [
+                    {"id": 0, "name": "Biscuit the dog", "duplicate_candidate_id": -1},
+                ]}),
+            ),
+            (
+                "ExtractedEdges",
+                json!({"edges": [{
+                    "source_entity_name": "Priya",
+                    "target_entity_name": "Biscuit the dog",
+                    "relation_type": "TOOK_TO_VET",
+                    "fact": long_fact,
+                    "episode_indices": [0],
+                }]}),
+            ),
+            (
+                "EdgeDuplicate",
+                json!({"duplicate_facts": [], "contradicted_facts": []}),
+            ),
+            (
+                "EdgeTimestamps",
+                json!({"valid_at": null, "invalid_at": null}),
+            ),
+            (
+                "SummarizedEntities",
+                json!({"summaries": [
+                    {"name": "Priya", "summary": "Priya ships the ledger and walks her dog."},
+                ]}),
+            ),
+        ],
+        seen: Mutex::new(Vec::new()),
+    };
+    let now = Utc.with_ymd_and_hms(2030, 1, 1, 0, 0, 0).unwrap();
+    let episode = EpisodeInput {
+        id: None,
+        name: "later".into(),
+        content: "Priya: took Biscuit the dog to the vet in Queens.".into(),
+        source: EpisodeSource::Message,
+        source_description: "chat".into(),
+        group_id: "kept".into(),
+        valid_at: Some("2030-01-01T00:00:00+00:00".into()),
+        metadata: None,
+    };
+    let previous = retrieve_previous_episodes(
+        &grit,
+        "kept",
+        EpisodeSource::Message,
+        now,
+        PREVIOUS_EPISODE_WINDOW,
+    )
+    .unwrap();
+    add_episode(
+        &grit,
+        &model,
+        &ConstEmbedder,
+        &episode,
+        &previous,
+        &AddEpisodeOptions::default(),
+        now,
+    )
+    .await
+    .unwrap();
+
+    let requests = model.seen.lock().unwrap().clone();
+    let rendered = |schema: &str| -> Vec<String> {
+        requests
+            .iter()
+            .filter(|r| r["schema_name"] == schema)
+            .map(Value::to_string)
+            .collect()
+    };
+    // Positive controls: the kept nodes really reached both prompts, so the
+    // sweep below is checking something.
+    assert!(
+        rendered("NodeResolutions")
+            .iter()
+            .any(|r| r.contains("Biscuit is Priya's dog.")),
+        "the dedupe prompt must show the kept dog's rebuilt summary"
+    );
+    assert!(
+        rendered("SummarizedEntities")
+            .iter()
+            .any(|r| r.contains("Priya commutes from Queens.")),
+        "an LLM summary pass must have seen Priya's rebuilt summary"
+    );
+    assert!(
+        requests
+            .iter()
+            .any(|r| r.to_string().contains("walking Biscuit before the commute")),
+        "the previous-episode window must reach a prompt"
+    );
+    for request in &requests {
+        assert!(
+            !request.to_string().contains(FORGOTTEN),
+            "the deleted episode leaked into a {} request",
+            request["schema_name"]
+        );
+    }
+
+    drop(grit);
+    remove_db(&path);
+}
+
+// ---------------------------------------------------------------------
 // Tier B — the same laws over a graph the pipeline wrote
 // ---------------------------------------------------------------------
 
@@ -991,6 +1563,43 @@ async fn trace1_deletion_leaves_the_sibling_group_byte_identical() {
         ids.push(last_episode);
         creator_ops(&grit, &ids).len()
     };
+    // The kept half, read before the delete: the facts the episode created
+    // (erased with their edges), and the summary-only updates on the nodes
+    // it keeps (every one of them predates the reset, so the field purge
+    // deletes it whole — label promotions write kind/attrs and survive).
+    let kept_nodes: Vec<Uuid> = grit
+        .episode_targets(last_episode)
+        .unwrap()
+        .into_iter()
+        .filter(|id| grit.node(*id).unwrap().is_some() && !sole_evidence.contains(id))
+        .collect();
+    let created_facts: Vec<String> = sole_evidence
+        .iter()
+        .filter_map(|id| grit.edge(*id).unwrap())
+        .map(|edge| edge.fact)
+        .collect();
+    let summary_only_updates = grit
+        .oplog_since(0)
+        .unwrap()
+        .iter()
+        .filter(|(_, entry)| {
+            matches!(&entry.op, GraphOp::UpdateNode { id, name: None, summary: Some(_), kind: None, attrs: None }
+                if kept_nodes.contains(id))
+        })
+        .count();
+    assert!(
+        kept_nodes.iter().any(|id| {
+            let summary = grit.node(*id).unwrap().unwrap().summary;
+            created_facts
+                .iter()
+                .any(|fact| summary.contains(fact.as_str()))
+        }),
+        "the trace must exercise the leak being fixed: a kept summary carrying a created fact"
+    );
+    let summaries_before: Vec<String> = kept_nodes
+        .iter()
+        .map(|id| grit.node(*id).unwrap().unwrap().summary)
+        .collect();
     let outcome = delete_episode(&grit, last_episode).unwrap();
     let purged: Vec<Uuid> = sorted(
         outcome
@@ -1025,11 +1634,60 @@ async fn trace1_deletion_leaves_the_sibling_group_byte_identical() {
     }
     assert!(carried > 0, "the deleted episode's own entry alone carried");
     assert_eq!(
+        sorted(outcome.kept_node_ids.clone()),
+        sorted(kept_nodes.clone())
+    );
+    // Kept summaries: reset and rebuilt, carrying none of the facts the
+    // episode created.
+    let rebuilt = kept_nodes
+        .iter()
+        .filter(|id| !grit.node(**id).unwrap().unwrap().summary.is_empty())
+        .count();
+    for (id, before) in kept_nodes.iter().zip(&summaries_before) {
+        let summary = grit.node(*id).unwrap().unwrap().summary;
+        for fact in &created_facts {
+            assert!(
+                !summary.contains(fact.as_str()),
+                "kept node {id} still carries {fact:?} in {summary:?}"
+            );
+        }
+        // Fidelity: trace1's summaries are pure fact-append lists, so the
+        // rebuild is exactly the old summary with the deleted episode's lines
+        // taken out — save that a fact appended twice (upstream's quirk for a
+        // node two drafts resolved to) is listed once.
+        let mut expected: Vec<&str> = Vec::new();
+        for line in before.lines() {
+            if !created_facts.iter().any(|fact| fact == line) && !expected.contains(&line) {
+                expected.push(line);
+            }
+        }
+        assert_eq!(summary, expected.join("\n"), "kept node {id}'s rebuild");
+    }
+    let target_log: String = grit
+        .oplog_since(0)
+        .unwrap()
+        .iter()
+        .filter(|(_, entry)| match &entry.op {
+            GraphOp::AddNode { id, .. } | GraphOp::UpdateNode { id, .. } => kept_nodes.contains(id),
+            _ => false,
+        })
+        .map(|(_, entry)| serde_json::to_string(&entry.op).unwrap())
+        .collect();
+    for fact in &created_facts {
+        assert!(
+            !target_log.contains(fact.as_str()),
+            "a kept node's op-log history still carries {fact:?}"
+        );
+    }
+    assert_eq!(
         snapshot(&grit, SIBLING),
         Snapshot {
-            // Only the shared log moved, by the Purge and the entries it
-            // scrubbed; the sibling's own entries are still there verbatim.
-            oplog: sibling_before.oplog + 1 - carried,
+            // Only the shared log moved, and by exactly this much: the
+            // Purge, minus the entries it scrubbed; the field purge, minus
+            // the summary-only updates it emptied; one rebuilt summary per
+            // kept node with a surviving fact. The sibling's own entries
+            // are still there verbatim.
+            oplog: sibling_before.oplog + 1 - carried + 1 - summary_only_updates + rebuilt,
             ..sibling_before
         },
         "an episode deletion must not touch the sibling group"

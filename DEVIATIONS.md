@@ -284,6 +284,69 @@ no transaction to Layer 2 by design, so the fix is the caller's — serialize
 deletes against ingests on the same group. Upstream holds no transaction at
 any point, so this is not a fidelity regression.
 
+## Episode deletion resets kept nodes' summaries
+
+**What diverges:** Upstream's `remove_episode` keeps every node another
+episode also mentions and leaves its summary exactly as it is.
+`forget::delete_episode` resets the summary of every node it keeps and writes
+a fresh list of the node's surviving facts in its place. Same transaction as
+the purge: the batch is the `Purge`, one `PurgeNodeFields` on the kept nodes'
+`summary` (grit ≥ 0.5), then one `UpdateNode` per kept node with a surviving
+fact. The rebuild is model-free: the node's incident edges in creation
+order, in the node's own group, with both endpoints live, newest whole facts
+within `2 × MAX_SUMMARY_CHARS`.
+
+**Why:** the summarize pass rewrote that summary while the deleted episode
+was being ingested. In the fact-append shortcut it literally appended the
+facts of the edges that episode created — the very facts the purge erases —
+and every later summary of the node descended from that one. Kept as is,
+the deleted episode's words survive in the summary and go back to the model
+on the next ingest that touches the node: the dedupe prompt's EXISTING
+ENTITIES shows the first 120 characters, the summarize prompt the whole
+summary. Measured on both golden traces before the fix: every episode
+deletion left the facts it created, verbatim, in the summaries of nodes it
+kept. "Take one memory back" was not true for any host that routes many
+episodes through one shared entity — which is the shape of most agent
+memory (one user, one subject).
+
+**Why acceptable:** deletion makes no model call, so no oracle applies
+(README); the question is only what state is honest. A reset alone would be
+honest but costly: every other episode's contribution to the summary would
+go with it, and in the fact-append regime the next passes append only their
+own facts, so it would never come back — a shared entity would lose its
+whole summary on every deletion. The rebuild restores what the graph still
+holds, in the shape upstream itself stores (an unsummarized fact list is
+what the fact-append shortcut writes, up to the same bound). Over the
+golden traces it is exact: deleting each trace's last episode, six of the
+seven rebuilt summaries equal the old summary with the deleted episode's
+facts removed, and the seventh differs only where upstream appended one
+fact twice (a node two drafts of one episode resolved to), which the
+rebuild lists once. Where an LLM pass wrote part of a summary, that part is
+lost and its facts return as list lines — stated, not hidden.
+
+What the reset reaches is grit's tiered erasure for fields
+(`PurgeNodeFields`): every earlier value leaves the live row, the per-field
+record, the FTS mirrors (delete-segment residue until `compact()`) and the
+op-log, and a floor strips a stale value that arrives later. What it does
+not reach is listed in `forget.rs` ("What forgotten means"): facts a later
+episode extracted with the deleted one in its context window, invalidations
+the deleted episode caused, label promotions and names, and a concurrent
+writer whose summary refresh carries a later HLC.
+
+**Asserted by:**
+`tests/deletion.rs::delete_episode_resets_and_rebuilds_the_summaries_it_keeps`
+(rebuild rule incl. the cross-group and ghost-endpoint exclusions; the
+forgotten text absent from summaries, op-log, export and search; the batch
+shape), `::a_rebuilt_summary_keeps_the_newest_facts_within_the_bound`,
+`::a_later_ingest_never_sees_what_the_deleted_episode_taught` (every request
+of a later ingest swept, with positive controls that the rebuilt summaries
+reached both the dedupe prompt and an LLM summary pass), and
+`::trace1_deletion_leaves_the_sibling_group_byte_identical` (the fidelity
+claim above, over pipeline-written state; the sibling stays byte-identical
+and the op-log moves by exactly the documented entries). The deletion batch
+of both traces is pinned in `oracle/fixtures/*/op_sequence.json`
+(`deletion`).
+
 ## Episode metadata is a nacre extension
 
 **What diverges:** `EpisodeInput.metadata` has no upstream counterpart —

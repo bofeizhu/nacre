@@ -84,11 +84,13 @@ memory.deleteGroup(groupId);                    // a whole namespace
 ```
 
 Both are synchronous (no model call is involved, only grit) and both are
-**writes**: each commits a single grit `Purge` in one transaction, so a
-deletion happens whole or not at all. `deleteEpisode` reports both halves
-— `purgedNodeIds` / `purgedEdgeIds` for what only this episode evidenced,
-`keptNodeIds` / `keptEdgeIds` for what other episodes evidence too, which
-is what a UI should show a person. `deleteGroup` reports what it swept and
+**writes**: each commits in one transaction, so a deletion happens whole or
+not at all. `deleteEpisode` reports both halves — `purgedNodeIds` /
+`purgedEdgeIds` for what only this episode evidenced, `keptNodeIds` /
+`keptEdgeIds` for what other episodes evidence too, which is what a UI
+should show a person. Every kept node's summary is reset (its earlier
+values erased like purged content) and rebuilt from its surviving facts,
+so nothing the deleted episode taught it reaches a prompt again. `deleteGroup` reports what it swept and
 treats an unknown group as a group with no rows: zero counts, nothing
 written.
 

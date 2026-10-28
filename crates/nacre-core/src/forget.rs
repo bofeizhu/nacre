@@ -1,8 +1,8 @@
 //! Deletion: the right-to-forget surface.
 //!
-//! Ports upstream's two removal entry points onto grit's single destructive
-//! op. Nacre decides *what* to erase — which is a judgment about evidence,
-//! not a storage question — and grit executes one `Purge`:
+//! Ports upstream's two removal entry points onto grit's purge family. Nacre
+//! decides *what* to erase — which is a judgment about evidence, not a
+//! storage question — and grit executes it:
 //!
 //! - [`delete_episode`] ports `graphiti_core/graphiti.py::remove_episode`:
 //!   forget one episode and the graph that exists only because of it.
@@ -11,13 +11,19 @@
 //!   group-deletion entry point of its own, only `clear_data`, which is a
 //!   test-fixture reset.
 //!
-//! **One batch, one op, one audit record.** Each call collects every id
-//! first and commits a single `GraphOp::Purge` through `apply_batch`, so a
-//! deletion is as atomic as an ingest: it happens whole or not at all, and
-//! leaves exactly one oplog entry naming what was forgotten. Upstream issues
-//! one un-transacted call per kind (edges, then nodes, then the episode), so
-//! a failure between them leaves a half-forgotten graph — the same class of
-//! defect the atomic ingest fixed (DEVIATIONS.md "Atomic episode commit").
+//! **One batch, one transaction.** Each call decides everything first and
+//! commits it through one `apply_batch`, so a deletion is as atomic as an
+//! ingest: it happens whole or not at all. [`delete_group`]'s batch is a
+//! single `GraphOp::Purge`, one oplog entry naming what was forgotten.
+//! [`delete_episode`]'s batch grows beyond that whenever the episode leaves
+//! nodes behind: the `Purge`, then one `GraphOp::PurgeNodeFields` resetting
+//! the summaries of the nodes it keeps, then one `UpdateNode` per kept node
+//! whose summary is rebuilt — so its audit record is the two content-free
+//! purge entries, and the rebuilt summaries are ordinary, current content.
+//! Upstream issues one un-transacted call per kind (edges, then nodes, then
+//! the episode), so a failure between them leaves a half-forgotten graph —
+//! the same class of defect the atomic ingest fixed (DEVIATIONS.md "Atomic
+//! episode commit").
 //!
 //! **The write is atomic; the decision above it is not.** Which ids to erase
 //! is settled by a sequence of reads, and grit's reader is a separate WAL
@@ -31,9 +37,9 @@
 //! being ported — but it is a gap, and the paragraph above it should not be
 //! read as covering the decision.
 //!
-//! **What "forgotten" means.** grit's purge is a tiered promise, stated
-//! there in full on `GraphOp::Purge`, and nacre inherits it whole — never
-//! more than it:
+//! **What "forgotten" means.** grit's purge family is a tiered promise,
+//! stated there in full on `GraphOp::Purge` and `GraphOp::PurgeNodeFields`,
+//! and nacre inherits it whole — never more than it:
 //!
 //! 1. **Erased from the live file, the op-log included.** The derived state
 //!    goes — the rows, their per-field update and invalidation records,
@@ -66,6 +72,34 @@
 //! decide the ids, and an id neither of them enumerates keeps its row and
 //! its entry. Each documents its own boundary below.
 //!
+//! **Kept nodes forget what their summaries learned.** An entity another
+//! episode also mentions outlives an episode deletion, but its summary does
+//! not come through unchanged: the summarize pass rewrote it while the
+//! deleted episode was ingested — in the fact-append path by literally
+//! appending the facts of the edges that episode created, which the purge
+//! has just erased — and every later rewrite descended from that one. So
+//! [`delete_episode`] resets the summary of every node it keeps, erasing
+//! every earlier value from the live file and the op-log at the tiers above
+//! (`PurgeNodeFields` — the floor it leaves also strips a stale value that
+//! arrives later), and writes in its place a fresh list of the node's
+//! surviving facts. No model call is made. What this does **not** reach, and
+//! nacre does not claim:
+//!
+//! - **Context.** A later episode saw the deleted one in its
+//!   previous-episode window, and what its extraction (or an LLM summary
+//!   pass) derived *through that context* is attributed to the later
+//!   episode, not to this one. It stays. Upstream is the same.
+//! - **Invalidations.** A kept edge this episode invalidated stays
+//!   invalidated; grit's invalidations are a MIN register with no
+//!   retraction.
+//! - **Labels and names.** A label promotion this episode caused on a kept
+//!   node, and a kept node's name (its creating episode's spelling), stay.
+//!   The merged-away draft rows below are unreachable, as documented.
+//! - **A concurrent writer.** A summary refresh computed elsewhere from the
+//!   old value, with a later HLC, wins and can carry it back; one with an
+//!   earlier HLC is dropped. Serialize deletes against ingests — the same
+//!   advice as the decision gap above.
+//!
 //! **A forgotten id is spent.** Purge also tombstones every id it names,
 //! permanently, and grit gates its inserts on that tombstone table: a later
 //! op naming a purged id is accepted, applied as a no-op, and reported as
@@ -75,10 +109,13 @@
 //! syncs the purge. [`delete_episode`] spells out what that costs at the
 //! ingest seam, where the id is the caller's.
 
-use grit_core::{GraphOp, Grit, WriteItem};
+use std::collections::HashSet;
+
+use grit_core::{GraphOp, Grit, NodeField, WriteItem};
 use uuid::Uuid;
 
 use crate::pipeline::PipelineError;
+use crate::prompts::MAX_SUMMARY_CHARS;
 
 /// What one [`delete_episode`] call erased, and what it deliberately left.
 ///
@@ -94,7 +131,9 @@ pub struct DeleteEpisodeOutcome {
     pub purged_node_ids: Vec<Uuid>,
     /// Edges erased: this episode was their earliest evidence.
     pub purged_edge_ids: Vec<Uuid>,
-    /// Nodes kept: other episodes mention them too.
+    /// Nodes kept: other episodes mention them too. Each one's summary was
+    /// reset and rebuilt from its surviving facts — see [`delete_episode`],
+    /// "Kept nodes' summaries".
     pub kept_node_ids: Vec<Uuid>,
     /// Edges kept: an earlier episode is their evidence.
     pub kept_edge_ids: Vec<Uuid>,
@@ -121,9 +160,11 @@ pub struct DeleteGroupOutcome {
 /// - **Nodes** mentioned by this episode *and no other* go; nodes another
 ///   episode also mentions stay.
 /// - The episode row itself always goes.
+/// - **Kept nodes' summaries are reset and rebuilt** (a nacre extension —
+///   see below).
 ///
-/// Everything is decided before anything is written, then erased in a single
-/// `Purge` — one transaction, one audit record.
+/// Everything is decided before anything is written, then committed in one
+/// batch — one transaction.
 ///
 /// # Deriving "created by"
 ///
@@ -167,6 +208,40 @@ pub struct DeleteGroupOutcome {
 ///   edge out of traversal and search, but its fact sentence is still in the
 ///   group scan.
 ///
+/// # Kept nodes' summaries
+///
+/// Every kept node gets a `GraphOp::PurgeNodeFields` on its summary, in the
+/// same batch as the `Purge`: the summary resets, and every earlier value of
+/// it leaves the live file and the op-log (see the module docs for what that
+/// does and does not reach). In its place goes a **fresh fact list** built
+/// the way upstream's fact-append shortcut builds summaries, from what the
+/// graph still holds — not a restoration of what the summary would have been
+/// without this episode, which no stored state can reproduce once an LLM
+/// pass has compressed it:
+///
+/// - the node's incident edges in creation order (`node_history`'s: the
+///   edges one episode wrote come back in the order it wrote them),
+/// - in the node's own group (an edge written into another namespace stays
+///   out of this one's prompts),
+/// - with both endpoints still live — none purged by this call or an
+///   earlier one,
+/// - invalidated facts included, as the fact-append shortcut keeps them,
+/// - joined with newlines, keeping the newest facts that fit within
+///   `2 × MAX_SUMMARY_CHARS` — the most upstream ever stores without an LLM
+///   pass. A node with no surviving fact keeps the empty summary.
+///
+/// Where every earlier pass took the fact-append shortcut — every summary
+/// in both golden traces — the list is the old summary with this episode's
+/// facts taken out, save that a fact upstream appended twice (a node two
+/// drafts of one episode resolved to) is listed once. Where an LLM pass
+/// wrote part of the summary, that part is gone, and the facts it covered
+/// come back as list lines.
+///
+/// The next ingest that mentions the node appends to that list, or
+/// compresses it with an LLM pass once it is over the bound — upstream's
+/// ordinary behavior. Upstream itself leaves the summary unchanged; see
+/// DEVIATIONS.md "Episode deletion resets kept nodes' summaries".
+///
 /// # Re-ingesting afterwards needs a NEW id
 ///
 /// The deleted episode's id is tombstoned forever (see the module docs), so
@@ -196,7 +271,8 @@ pub struct DeleteGroupOutcome {
 ///
 /// What is erased is erased from the live file, op-log entries included,
 /// within the limits the module docs state.
-// ports: graphiti_core/graphiti.py::remove_episode
+// ports: graphiti_core/graphiti.py::remove_episode (plus the summary reset,
+// which has no upstream counterpart)
 pub fn delete_episode(
     grit: &Grit,
     episode_id: Uuid,
@@ -245,12 +321,84 @@ pub fn delete_episode(
     let mut ids = outcome.purged_edge_ids.clone();
     ids.extend(&outcome.purged_node_ids);
     ids.push(episode_id);
-    purge(grit, ids)?;
+
+    // Decided before anything is written, like the ids: the rebuild reads
+    // the edges the purge is about to erase, so it must exclude them itself.
+    let purged: HashSet<Uuid> = ids.iter().copied().collect();
+    let mut rebuilt: Vec<(Uuid, String)> = Vec::new();
+    for &node in &outcome.kept_node_ids {
+        let summary = surviving_facts(grit, node, &purged)?;
+        if !summary.is_empty() {
+            rebuilt.push((node, summary));
+        }
+    }
+
+    // Never empty: the episode itself is always in `ids`.
+    let mut batch = vec![WriteItem::Op(GraphOp::Purge { ids })];
+    if !outcome.kept_node_ids.is_empty() {
+        batch.push(WriteItem::Op(GraphOp::PurgeNodeFields {
+            ids: outcome.kept_node_ids.clone(),
+            fields: vec![NodeField::Summary],
+        }));
+        // Minted after the reset, so each outranks it and survives.
+        for (id, summary) in rebuilt {
+            batch.push(WriteItem::Op(GraphOp::UpdateNode {
+                id,
+                name: None,
+                summary: Some(summary),
+                kind: None,
+                attrs: None,
+            }));
+        }
+    }
+    grit.apply_batch(batch)?;
     Ok(outcome)
 }
 
+/// A kept node's replacement summary: its surviving facts as a fresh list,
+/// by the rule [`delete_episode`] states under "Kept nodes' summaries".
+/// `purged` is everything the deletion is about to erase.
+fn surviving_facts(
+    grit: &Grit,
+    node: Uuid,
+    purged: &HashSet<Uuid>,
+) -> Result<String, PipelineError> {
+    let history = grit.node_history(node)?;
+    let mut facts: Vec<String> = Vec::new();
+    for edge in history.edges {
+        if purged.contains(&edge.id)
+            || edge.group_id != history.node.group_id
+            || edge.fact.is_empty()
+        {
+            continue;
+        }
+        // `node_history` keeps an edge whose other endpoint is gone; its fact
+        // names a forgotten entity.
+        let other = if edge.src == node { edge.dst } else { edge.src };
+        if purged.contains(&other) || grit.node(other)?.is_none() {
+            continue;
+        }
+        facts.push(edge.fact);
+    }
+    // The newest facts that fit, whole, in upstream's fact-append bound.
+    let bound = MAX_SUMMARY_CHARS * 2;
+    let mut kept: Vec<String> = Vec::new();
+    let mut len = 0;
+    for fact in facts.into_iter().rev() {
+        let added = fact.chars().count() + usize::from(!kept.is_empty());
+        if len + added > bound {
+            break;
+        }
+        len += added;
+        kept.push(fact);
+    }
+    kept.reverse();
+    Ok(kept.join("\n").trim().to_owned())
+}
+
 /// Forget a whole namespace: every node, edge and episode row tagged with
-/// `group_id`, erased in a single `Purge`.
+/// `group_id`, erased in a single `Purge`. Every node the group holds goes,
+/// so their summaries go whole — there is no kept node to reset.
 ///
 /// This enumerates rows, not evidence — the full bi-temporal record, since
 /// grit's three group scans apply no temporal or tombstone filter. Expired
@@ -273,7 +421,11 @@ pub fn delete_episode(
 ///    supported way to break it: an edge written into another namespace
 ///    survives this call and is reachable in that namespace. A caller using
 ///    that override, or writing edges through grit directly, must sweep by
-///    incidence (`Grit::node_history` over the group's nodes) as well.
+///    incidence (`Grit::node_history` over the group's nodes) as well. The
+///    override cuts the other way too: deleting the namespace such an edge
+///    was written *into* erases the edge, but the summarize pass appended its
+///    fact to its endpoints' summaries, and those live in the group the
+///    episode came from — which this call does not touch.
 /// 2. **The default group `""` is a real group, and holds strays.** When a
 ///    `MergeNodes` arrives before the `AddNode` it absorbs, grit parks a
 ///    placeholder row for the absent node in `""` until the real add lands.

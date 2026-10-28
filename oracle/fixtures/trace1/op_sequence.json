@@ -1100,5 +1100,56 @@
         "$n52"
       ]
     }
-  ]
+  ],
+  "deletion": {
+    "deleted_episode": "$n53",
+    "op_count": 6,
+    "ops": [
+      {
+        "op": "purge",
+        "ids": [
+          "$n44",
+          "$n46",
+          "$n47",
+          "$n49",
+          "$n50",
+          "$n51",
+          "$n52",
+          "$n53"
+        ]
+      },
+      {
+        "op": "purge_node_fields",
+        "ids": [
+          "$n0",
+          "$n1",
+          "$n8",
+          "$n34"
+        ],
+        "fields": [
+          "summary"
+        ]
+      },
+      {
+        "op": "update_node",
+        "id": "$n0",
+        "summary": "Marco caught a Knicks game with his brother\nMarco invited Priya to the data engineering meetup in New York City at the Flatiron Building on Thursday.\nMarco congratulated Priya Raman on her new job."
+      },
+      {
+        "op": "update_node",
+        "id": "$n1",
+        "summary": "Priya joined Northwind Labs as a data engineer in January\nPriya commutes from Queens\nPriya owns a dog named Biscuit\nPriya walked her dog Biscuit around Prospect Park\nPriya will attend the data engineering meetup in New York City at the Flatiron Building on Thursday.\nPriya left Northwind Labs last Friday.\nPriya will start at Meridian Health next month as a senior data engineer.\nMarco congratulated Priya Raman on her new job."
+      },
+      {
+        "op": "update_node",
+        "id": "$n8",
+        "summary": "Priya owns a dog named Biscuit"
+      },
+      {
+        "op": "update_node",
+        "id": "$n34",
+        "summary": "Priya will start at Meridian Health next month as a senior data engineer."
+      }
+    ]
+  }
 }

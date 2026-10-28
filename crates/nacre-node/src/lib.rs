@@ -117,7 +117,9 @@ pub struct DeleteEpisodeResultJs {
     pub purged_node_ids: Vec<String>,
     /// Edges erased: this episode was their earliest evidence.
     pub purged_edge_ids: Vec<String>,
-    /// Nodes kept: other episodes mention them too.
+    /// Nodes kept: other episodes mention them too. Each one's summary was
+    /// reset — every earlier value erased — and rebuilt from its surviving
+    /// facts.
     pub kept_node_ids: Vec<String>,
     /// Edges kept: an earlier episode is their evidence.
     pub kept_edge_ids: Vec<String>,
@@ -435,9 +437,10 @@ impl Memory {
 
     // ------------------------------------------------------------------
     // Deletion. Synchronous like the read path — no model call is
-    // involved, only grit — but these are WRITES: each commits one
-    // `Purge` in a single transaction, so a deletion happens whole or not
-    // at all. "Forgotten" means gone from the live file: rows, indexes,
+    // involved, only grit — but these are WRITES: each commits its
+    // decision in a single transaction (a group: one `Purge`; an episode:
+    // the `Purge` plus the reset and rebuild of the summaries it keeps),
+    // so a deletion happens whole or not at all. "Forgotten" means gone from the live file: rows, indexes,
     // vectors and the op-log entries that carried them, with the freed
     // pages zeroed. What stays out of reach of any library — OS backups,
     // copies taken earlier, devices that never receive the op — is
@@ -447,8 +450,9 @@ impl Memory {
 
     /// Forget one episode, and the graph that exists only because of it:
     /// nodes this episode is the sole evidence for and facts it created
-    /// go; anything another episode also evidences stays. Returns both
-    /// halves.
+    /// go; anything another episode also evidences stays — with its
+    /// summary reset and rebuilt from its surviving facts, so nothing this
+    /// episode taught it reaches a prompt again. Returns both halves.
     ///
     /// Rejects with [`EPISODE_NOT_FOUND_CODE`] when the id is not stored,
     /// including a second delete of an episode already deleted — nothing

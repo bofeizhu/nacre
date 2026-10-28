@@ -23,6 +23,15 @@
 //!   * nothing else is touched: the op's own `op` tag and every payload
 //!     field survive verbatim.
 //!
+//! After the last episode, the trace's last episode is **deleted** and the
+//! deletion's batch is pinned too (`deletion`): the `Purge`, the
+//! `PurgeNodeFields` resetting the kept nodes' summaries, and the rebuilt
+//! summaries — so a change to what forgetting writes is reviewed the same
+//! way a change to what ingesting writes is. One extra rule there: the ids
+//! inside a purge op, and the order of the rebuilt-summary updates, follow
+//! uuid order, and uuids minted in the same millisecond order randomly
+//! between runs, so both are sorted by placeholder before pinning.
+//!
 //! Modes: `NACRE_UPDATE_OP_SEQUENCE=1 cargo test -p nacre-core --test
 //! op_sequence` rewrites `oracle/fixtures/<trace>/op_sequence.json`; without
 //! the variable the test compares and fails on any diff.
@@ -33,6 +42,7 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, TimeZone, Utc};
 use grit_core::{GraphOp, Grit};
 use nacre_core::extract::{EpisodeInput, EpisodeSource};
+use nacre_core::forget::delete_episode;
 use nacre_core::model::{EmbedderMeta, RecordingStore, ReplayEmbedder, ReplayModel};
 use nacre_core::pipeline::{
     AddEpisodeOptions, PREVIOUS_EPISODE_WINDOW, add_episode, retrieve_previous_episodes,
@@ -89,7 +99,7 @@ fn register_uuids(op: &GraphOp, ph: &mut Placeholders) {
             ph.intern(*from);
             ph.intern(*into);
         }
-        GraphOp::Purge { ids } => {
+        GraphOp::Purge { ids } | GraphOp::PurgeNodeFields { ids, .. } => {
             for id in ids {
                 ph.intern(*id);
             }
@@ -247,6 +257,30 @@ async fn capture(trace: &str) -> Option<Value> {
         }));
     }
 
+    // Forget the last episode and pin what that writes.
+    let last = grit.episodes_in_group(&group_id).unwrap().pop().unwrap().id;
+    delete_episode(&grit, last).expect("delete_episode");
+    let rank = |ph: &Placeholders, id: &Value| -> usize {
+        let name = id.as_str().unwrap();
+        ph.order.iter().position(|u| ph.names[u] == name).unwrap()
+    };
+    let mut deletion: Vec<Value> = grit
+        .oplog_since(last_seq)
+        .expect("oplog read")
+        .iter()
+        .map(|(_, entry)| normalize_op(&entry.op, &mut ph))
+        .collect();
+    for op in &mut deletion {
+        if let Some(ids) = op.get_mut("ids").and_then(Value::as_array_mut) {
+            ids.sort_by_key(|id| rank(&ph, id));
+        }
+    }
+    let updates_from = deletion
+        .iter()
+        .position(|op| op["op"] == "update_node")
+        .unwrap_or(deletion.len());
+    deletion[updates_from..].sort_by_key(|op| rank(&ph, &op["id"]));
+
     drop(grit);
     for suffix in ["", "-wal", "-shm"] {
         let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
@@ -257,6 +291,11 @@ async fn capture(trace: &str) -> Option<Value> {
         "group_id": group_id,
         "placeholders": "UUIDs replaced by $nK, K = order of first appearance across the trace",
         "episodes": episodes_out,
+        "deletion": {
+            "deleted_episode": ph.names[&last],
+            "op_count": deletion.len(),
+            "ops": deletion,
+        },
     }))
 }
 
