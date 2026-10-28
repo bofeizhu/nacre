@@ -368,7 +368,7 @@ fn surviving_facts(
     for edge in history.edges {
         if purged.contains(&edge.id)
             || edge.group_id != history.node.group_id
-            || edge.fact.is_empty()
+            || edge.fact.trim().is_empty()
         {
             continue;
         }

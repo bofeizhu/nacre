@@ -1055,6 +1055,9 @@ fn kept_graph(grit: &Grit, clock: &ManualClock) -> KeptGraph {
         &ledger_facts,
         &[],
     );
+    // A blank fact (hand-written) between the episodes: no line, no blank
+    // line, and nothing counted against the bound.
+    w.edge_in("kept", priya, northwind, "   ");
 
     let biscuit = w.node("Biscuit");
     let adopted = format!("Priya adopted a dog named {FORGOTTEN}.");
