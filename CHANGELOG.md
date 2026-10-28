@@ -7,6 +7,60 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 0.2.0 predate this file; their notes live in the git tags
 (`v0.1.0` … `v0.1.2`) and the matching GitHub releases.
 
+## 0.4.0 — 2026-10-29
+
+Requires **`grit-core = "0.5"`** (schema v7; existing files migrate in place
+on open).
+
+### Changed
+
+- **An episode deletion now forgets what the nodes it keeps learned from
+  it.** `delete_episode` keeps every node another episode also mentions —
+  as before, and as upstream does — but no longer keeps its summary as is:
+  the summarize pass had rewritten it while the deleted episode was
+  ingested, in the fact-append path by appending the facts of the edges
+  that episode created, which the purge erases. Those words went back to
+  the model on the next ingest that touched the node. Now, in the same
+  batch as the `Purge`:
+  - grit's new `PurgeNodeFields` resets the summary of every kept node and
+    erases every earlier value of it from the live file and the op-log
+    (exports and re-delivery included), at the same tiers as a purge;
+  - an `UpdateNode` writes a fresh list of the node's surviving facts in
+    its place — its incident edges in creation order, in its own group,
+    with both endpoints live, the newest whole facts within
+    `2 × MAX_SUMMARY_CHARS`. No model call. Where earlier passes took the
+    fact-append shortcut (every summary in both golden traces), that is the
+    old summary with the deleted episode's facts removed; where an LLM pass
+    wrote part of it, that part is gone and its facts return as lines.
+
+  The batch therefore grows beyond the single `Purge` whenever the episode
+  leaves nodes behind; it is still one transaction. `DeleteEpisodeOutcome`
+  is unchanged: `kept_node_ids` is exactly the set whose summaries were
+  reset (Rust, Node and Swift docs say so). Upstream leaves the summary
+  unchanged — see DEVIATIONS.md "Episode deletion resets kept nodes'
+  summaries".
+
+  Stated limits, in `nacre_core::forget`: facts a later episode extracted
+  with the deleted one in its context window, invalidations the deleted
+  episode caused, label promotions and names, and a concurrent writer whose
+  summary refresh carries a later HLC are not reached. `delete_group` is
+  unchanged (every node in the group goes whole), with one more documented
+  edge: deleting the group an edge was written *into* through
+  `ExtractEdgesOptions::group_id` leaves its fact in its endpoints'
+  summaries, which live in the episode's group.
+
+### Tests
+
+- `tests/deletion.rs`: the reset and rebuild on a pipeline-shaped graph
+  (cross-group and ghost-endpoint edges excluded; the deleted words absent
+  from summaries, op-log, export and search), the bound, and a sweep of
+  every request a later ingest issues — with positive controls that the
+  rebuilt summaries reached the dedupe prompt and an LLM summary pass. The
+  trace1 sibling test now pins the rebuild's fidelity and accounts for
+  every op-log entry the deletion adds or removes.
+- `tests/op_sequence.rs` pins each trace's deletion batch (`deletion` in
+  `oracle/fixtures/*/op_sequence.json`). The ingest pins are unchanged.
+
 ## 0.3.0 — 2026-08-28
 
 ### Added
