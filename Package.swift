@@ -20,10 +20,17 @@ let package = Package(
     ],
     targets: [
         // The Rust side: nacre-core's pipeline + grit's storage, compiled to
-        // a static library per platform. Path-local while the Layer 3 app is
-        // developed alongside nacre; a released package would point this at a
-        // versioned `url:`/`checksum:` zip instead.
-        .binaryTarget(name: "nacreFFI", path: "target/swift/nacre.xcframework"),
+        // a static library per platform. THIS IS THE RELEASE MANIFEST: the
+        // binary target resolves to the versioned artifact attached to the
+        // GitHub release this tag carries, and the generated bindings are
+        // committed alongside it, so `.package(url:, from:)` consumption
+        // works from a bare clone. Day-to-day development happens on `main`,
+        // whose manifest uses a path binary target + scripts/build-swift.sh.
+        .binaryTarget(
+            name: "nacreFFI",
+            url: "https://github.com/bofeizhu/nacre/releases/download/v0.4.0/nacre-xcframework-v0.4.0.zip",
+            checksum: "e291df878a4103eff6fc186dc807973d9d14e97cfd5317112f76153f1579467f"
+        ),
 
         // The generated bindings, in their own target for two reasons: it
         // keeps the FFI plumbing out of any host build settings (Xcode 26
