@@ -37,8 +37,10 @@ jobs:
   audit:
     name: cargo audit
     runs-on: ubuntu-latest
+    # The CLI, as in grit: it fails on a vulnerability and lists warnings
+    # (yanked, unmaintained) without failing. rustsec/audit-check fails the
+    # job on any warning, because posting one needs checks: write.
     steps:
       - uses: actions/checkout@v4
-      - uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: taiki-e/install-action@cargo-audit
+      - run: cargo audit
