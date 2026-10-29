@@ -1140,6 +1140,28 @@ edges (grit's invalidations are a MIN register with no retraction); label
 promotions and a kept node's name; a concurrent writer whose summary
 refresh carries a later HLC.
 
+- [x] Release: grit-core 0.5.0 to crates.io first, then nacre's
+      requirement `grit-core = "0.5"` with the `[patch.crates-io]`
+      override deleted, full gates against the registry, nacre-core 0.4.0
+      + tag + GitHub release with the xcframework (release-manifest flow,
+      see M8).
+      → done 2026-10-29 (user-approved): grit-core/grit-compat 0.5.0 on
+      crates.io (grit tag v0.5.0); nacre re-gated against the registry
+      with the patch removed (cargo 120 with conformance on both traces,
+      Node 6/6, XCTest 10/10); nacre-core 0.4.0 on crates.io; tag v0.4.0
+      on the release-manifest commit (branch release/v0.4.0) with
+      https://github.com/bofeizhu/nacre/releases/tag/v0.4.0 carrying
+      nacre-xcframework-v0.4.0.zip (checksum
+      e291df878a4103eff6fc186dc807973d9d14e97cfd5317112f76153f1579467f);
+      verified by a bare scratch consumer pinned `exact: "0.4.0"` that
+      fetched the asset, built, opened a store and got `EpisodeNotFound`
+      for a missing id. Release-day snag, CI-only: RustSec advisories
+      published the day before against quinn-proto, rustls, rustls-webpki
+      and webpki-roots — reached only through `reqwest` behind the
+      optional `claude` / `openai-embed` features, absent from the
+      xcframework (no such symbols in any slice) and from what a crates.io
+      consumer resolves. Cleared by a lockfile-only bump.
+
 ## Later (do not start without a user decision)
 
 Coverage deepening, in the order agreed 2026-07-10 (activate when the
